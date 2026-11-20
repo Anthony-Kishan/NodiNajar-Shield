@@ -9,6 +9,16 @@ import { useJson } from "@/lib/extra";
 import { latStr, nf } from "@/lib/format";
 import { pct, plan, type ExposureFile, type HazardFile, type PrioritiesFile } from "@/lib/shield";
 
+type Scen = "river_rising" | "river_not_rising";
+const SCEN_NAME: Record<Scen, string> = { river_rising: "river rising", river_not_rising: "river not rising" };
+
+function Delta({ now, then, goodUp = false, fmt = (v: number) => nf(Math.abs(v)) }: { now: number; then: number; goodUp?: boolean; fmt?: (v: number) => string }) {
+  const d = now - then;
+  if (Math.abs(d) < 0.5) return <span className="delta same">same</span>;
+  const up = d > 0;
+  return <span className={`delta ${up === goodUp ? "down" : "up"}`}>{up ? "▲" : "▼"} {fmt(d)}</span>;
+}
+
 function Stepper({ value, set, step, min, max, label }: { value: number; set: (v: number) => void; step: number; min: number; max: number; label: string }) {
   return (
     <div className="stepper">
@@ -29,15 +39,21 @@ export default function PlanPage() {
   const [rising, setRising] = useState<boolean | null>(null);
   const scen = rising === null ? (pri?.scenario ?? "river_not_rising") : rising ? "river_rising" : "river_not_rising";
 
-  const input = useMemo(() => {
-    if (!hz || !ex) return [];
-    const e = new Map(ex.stretches.map((x) => [x.id, x]));
-    return hz.stretches.filter((s) => s.scenarios && e.has(s.id)).map((s) => ({
-      id: s.id, p: s.scenarios![scen as "river_rising" | "river_not_rising"].p,
-      people_est: e.get(s.id)!.people_est, people_in_high_zone_est: e.get(s.id)!.people_in_high_zone_est,
-    }));
-  }, [hz, ex, scen]);
+  const inputs = useMemo(() => {
+    const mk = (sc: Scen) => {
+      if (!hz || !ex) return [];
+      const e = new Map(ex.stretches.map((x) => [x.id, x]));
+      return hz.stretches.filter((s) => s.scenarios && e.has(s.id)).map((s) => ({
+        id: s.id, p: s.scenarios![sc].p,
+        people_est: e.get(s.id)!.people_est, people_in_high_zone_est: e.get(s.id)!.people_in_high_zone_est,
+      }));
+    };
+    return { river_rising: mk("river_rising"), river_not_rising: mk("river_not_rising") };
+  }, [hz, ex]);
+  const other: Scen = scen === "river_rising" ? "river_not_rising" : "river_rising";
+  const input = inputs[scen as Scen];
   const result = useMemo(() => plan(input, crews, shelter), [input, crews, shelter]);
+  const alt = useMemo(() => plan(inputs[other], crews, shelter), [inputs, other, crews, shelter]);
   const marks = useMemo(() => new Map(result.actions.map((a) => [a.id, a.action])), [result]);
   const people = useMemo(() => new Map((ex?.stretches ?? []).map((e) => [e.id, e.people_in_high_zone_est || e.people_est])), [ex]);
 
@@ -47,6 +63,7 @@ export default function PlanPage() {
   const seg = new Map(segs.map((s) => [s.id, s]));
   const exp = new Map(ex.stretches.map((x) => [x.id, x]));
   const prob = new Map(input.map((x) => [x.id, x.p]));
+  const hint = <div className="ribbon-hint">← swipe to see the whole river →</div>;
   const share = result.share_covered ?? 0;
   const crewActs = result.actions.filter((a) => a.action === "geobags");
   const evacActs = result.actions.filter((a) => a.action === "evacuate");
@@ -61,11 +78,23 @@ export default function PlanPage() {
             <p>Tell NodiNajar what you have this week. It sends each crew and shelter place to where the chance of the bank moving × the people in the way is highest.</p>
           </div>
           <div className="seg" role="group" aria-label="River scenario">
-            <button type="button" aria-pressed={rising === null} onClick={() => setRising(null)}>Today&apos;s river</button>
+            <button type="button" aria-pressed={rising === null} onClick={() => setRising(null)}>Today ({pri?.scenario === "river_rising" ? "rising" : "falling"})</button>
             <button type="button" aria-pressed={rising === true} onClick={() => setRising(true)}>If it rises</button>
             <button type="button" aria-pressed={rising === false} onClick={() => setRising(false)}>If it doesn&apos;t</button>
           </div>
         </div>
+
+        <div className="scen-strip" key={scen}>
+          <div className="scen-tile"><div className="t-label">Stretches likely to move</div>
+            <div className="t-val">{input.filter((x) => x.p >= 0.5).length}<Delta now={input.filter((x) => x.p >= 0.5).length} then={inputs[other].filter((x) => x.p >= 0.5).length} /></div></div>
+          <div className="scen-tile"><div className="t-label">People expected to be hit</div>
+            <div className="t-val">{nf(result.expected_people_total)}<Delta now={result.expected_people_total} then={alt.expected_people_total} /></div></div>
+          <div className="scen-tile"><div className="t-label">Protected by this plan</div>
+            <div className="t-val">{nf(result.expected_people_covered)}<Delta now={result.expected_people_covered} then={alt.expected_people_covered} goodUp /></div></div>
+          <div className="scen-tile"><div className="t-label">Still exposed</div>
+            <div className="t-val">{nf(result.expected_people_total - result.expected_people_covered)}<Delta now={result.expected_people_total - result.expected_people_covered} then={alt.expected_people_total - alt.expected_people_covered} /></div></div>
+        </div>
+        <p className="seg-note" style={{ marginTop: -10, marginBottom: 14, textAlign: "left" }}>Showing: <b>{SCEN_NAME[scen as Scen]}</b>{rising === null && pri ? " (today's GloFAS forecast)" : ""}. Arrows compare with the {SCEN_NAME[other]} case.</p>
 
         <section className="grid g-3">
           <div className="card">
@@ -83,7 +112,7 @@ export default function PlanPage() {
             </div>
           </div>
 
-          <div className="card tint-people span-2" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 26, alignItems: "center" }}>
+          <div className="card tint-people span-2 cover-card">
             <Ring value={share} total={1} size={190} stroke={18} color="#7356d0" label={<><b style={{ fontSize: 40 }}>{pct(share)}</b><span>of people at risk<br />covered</span></>} />
             <div>
               <h3 style={{ fontSize: 24 }}>This plan reaches {pct(share)} of the expected people at risk</h3>
@@ -103,7 +132,7 @@ export default function PlanPage() {
           <div className="ribbon-wrap light">
             <RiverRibbon banklines={data.banklines} segs={segs.filter((s) => prob.has(s.id))} bbox={data.manifest.aoi_bbox} prob={prob} people={people} marks={marks}
               onPick={(id) => (window.location.href = `/alerts/?seg=${id}`)} />
-            <RibbonLegend mode="plan" />
+            <RibbonLegend mode="plan" />{hint}
           </div>
         </section>
 

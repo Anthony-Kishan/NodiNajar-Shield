@@ -63,6 +63,7 @@ export default function Overview() {
             <RiverRibbon banklines={data.banklines} segs={segs} bbox={m.aoi_bbox} people={people} selected={sel}
               onPick={(id) => setSel(id === sel ? null : id)} dark />
             <RibbonLegend mode="level" dark />
+            <div className="ribbon-hint" style={{ color: "#cfe" }}>← swipe to see the whole river →</div>
           </div>
         </section>
 

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ErrorBox, LevelPill, Loading, SegmentRow } from "@/components/Bits";
 import { RetreatChart } from "@/components/Charts";
-import { IconLayers, IconPause, IconPlay, IconX } from "@/components/Icons";
+import { IconCube, IconLayers, IconMap, IconPause, IconPlay, IconSwipe, IconX } from "@/components/Icons";
 import { CompareMap, RiverMap } from "@/components/MapClient";
 import { MapBoundary } from "@/components/Visuals";
 import type { Map as MLMap } from "maplibre-gl";
@@ -22,7 +22,7 @@ const LAYER_LABELS: [keyof MapLayers, string, string][] = [
   ["water", "Water on this pass", "#57b8c9"],
   ["loss", "Land the river took", "#e5533d"],
   ["banks", "Outer bank on this pass", "#57d2e6"],
-  ["firstBank", "Bank on 18 Jun (compare)", "#ffffff"],
+  ["firstBank", "Bank on 18 Jun (compare)", "#f2f2f2"],
   ["segments", "Bank stretches by risk", "#e9a93b"],
   ["homes", "Homes near the new bank", "#f6d365"],
 ];
@@ -36,6 +36,7 @@ export default function MapPage() {
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
   const [opacity, setOpacity] = useState(0.7);
   const [threeD, setThreeD] = useState(false);
+  const [tried, setTried] = useState(false);
   const [sel, setSel] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [compare, setCompare] = useState(false);
@@ -99,7 +100,7 @@ export default function MapPage() {
   });
 
   return (
-    <main className="map-shell dark-scope">
+    <main className="map-shell">
       <MapBoundary>
         <RiverMap data={data} passIndex={idx} basemap={basemap} layers={layers} radarOpacity={opacity} channel={channel} threeD={threeD && !compare}
           selectedId={sel} onSelect={(id) => setSel(id)} onMapReady={setMainMap} />
@@ -110,35 +111,48 @@ export default function MapPage() {
           optical={leftSide === "optical" ? hls?.by_pass[P[idx].date] ?? null : null} />
       )}
 
-      <div className="float stamp" aria-live="polite">
-        <b className="num">{fmtDate(cur.date, true)}</b>
-        <span>Pass {idx + 1} of {P.length} · {nf(cur.water_km2, 1)} km² water · threshold {cur.threshold_db} dB</span>
-        <span className="dim" style={{ fontSize: 11.5, display: "block" }}>Radar: NASA-ISRO NISAR L2 GCOV (provisional){basemap === "nasa" ? " · Map: NASA GIBS VIIRS, same day" : ""}</span>
+      <div className="map-top">
+        <div className="mode-bar" role="group" aria-label="Map view">
+          <button type="button" aria-pressed={!threeD && !compare} onClick={() => { setThreeD(false); setCompare(false); }}>
+            <IconMap /> <span>2D<span className="long"> map</span></span>
+          </button>
+          <button type="button" className={tried ? undefined : "glow"} aria-pressed={threeD && !compare} onClick={() => { setCompare(false); setThreeD(true); setTried(true); }}
+            title="Tilt the map: columns rise where the bank moved most">
+            <IconCube /> <span>3D<span className="long"> view</span></span>
+          </button>
+          <button type="button" className={tried ? undefined : "glow"} aria-pressed={compare} onClick={() => { setCompare(true); setTried(true); }}
+            title="Drag a divider to compare two dates">
+            <IconSwipe /> <span><span className="long">Before / after</span><span className="short">Compare</span></span>
+          </button>
+        </div>
+        {compare ? (
+          <div className="float compare-bar">
+            <span className="cb-label">Left</span>
+            <select value={leftSide} onChange={(e) => setLeftSide(e.target.value as "radar" | "optical")} aria-label="Left side shows">
+              <option value="radar">Radar, earlier pass</option>
+              <option value="optical" disabled={!hls}>Optical photo (NASA HLS)</option>
+            </select>
+            {leftSide === "radar" && (
+              <select value={Math.min(before, idx)} onChange={(e) => setBefore(Number(e.target.value))} aria-label="Before pass">
+                {P.map((p, i) => <option key={p.date} value={i} disabled={i >= idx}>{fmtDate(p.date, true)}</option>)}
+              </select>
+            )}
+            <span className="cb-arrow">⇆</span>
+            <span className="cb-label">Right</span><b>{fmtDate(cur.date, true)}</b>
+            <span className="cb-hint">drag the white handle · pick the right date on the timeline</span>
+          </div>
+        ) : (
+          <div className="float stamp" aria-live="polite">
+            <b className="num">{fmtDate(cur.date, true)}</b>
+            <span>Pass {idx + 1} of {P.length} · {nf(cur.water_km2, 1)} km² water{threeD ? " · 3D: column height = how far the bank moved" : ""}</span>
+          </div>
+        )}
       </div>
 
       <aside className={`float panel-left${panelOpen ? " open" : ""}`} aria-label="Map layers">
         <button type="button" className="sheet-toggle" onClick={() => setPanelOpen((v) => !v)} aria-expanded={panelOpen}>
           <IconLayers /> {panelOpen ? "Hide layers" : "Layers and basemap"}
         </button>
-        <div className="ctrl-title">Before / after</div>
-        <label className="toggle"><span><b>Swipe compare</b>: drag the divider to see the river on two dates</span>
-          <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} /></label>
-        {compare && (
-          <div className="compare-pick">
-            <span className="muted">Left side</span>
-            <select value={leftSide} onChange={(e) => setLeftSide(e.target.value as "radar" | "optical")} aria-label="Left side shows">
-              <option value="radar">An earlier NISAR pass</option>
-              <option value="optical" disabled={!hls}>NASA HLS optical, nearest clear day</option>
-            </select>
-            {leftSide === "radar" ? <>
-              <span className="muted">Before</span>
-              <select value={Math.min(before, idx)} onChange={(e) => setBefore(Number(e.target.value))} aria-label="Before pass">
-                {P.map((p, i) => <option key={p.date} value={i} disabled={i >= idx}>{fmtDate(p.date, true)}</option>)}
-              </select>
-            </> : <span className="muted">Optical from NASA HLS: what a camera saw within 6 days of the pass. Monsoon cloud is the point.</span>}
-            <span className="muted">After: pick a date on the timeline</span>
-          </div>
-        )}
         <div className="ctrl-title">Basemap</div>
         <div className="chips">
           {BASEMAPS.map((b) => (
@@ -162,9 +176,6 @@ export default function MapPage() {
         </>}
         <div className="ctrl-title">Radar opacity</div>
         <input type="range" min={0} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} aria-label="Radar opacity" />
-        <div className="ctrl-title">View</div>
-        <label className="toggle"><span>3D: columns show how far each stretch moved{compare ? " (off while comparing)" : ""}</span>
-          <input type="checkbox" checked={threeD && !compare} disabled={compare} onChange={(e) => setThreeD(e.target.checked)} /></label>
         <div className="ctrl-title">Legend</div>
         <div style={{ display: "grid", gap: 4, fontSize: 12.5 }} className="muted">
           <span><i className="swatch" style={{ background: "#e5533d", borderRadius: "50%" }} />High risk: moved ≥ 100 m, homes within 200 m</span>
@@ -172,6 +183,7 @@ export default function MapPage() {
           <span><i className="swatch" style={{ background: "#f6d365", borderRadius: "50%" }} />Home within 200 m of the new bank</span>
         </div>
         <p className="note">Radar: dark is water, bright is land. Keys: ← → step passes, space plays.</p>
+        <p className="note">Map imagery: {basemap === "nasa" ? "NASA GIBS VIIRS, same day" : "see attribution"} · Radar: NASA-ISRO NISAR L2 GCOV (provisional)</p>
       </aside>
 
       {s ? (
@@ -223,7 +235,7 @@ export default function MapPage() {
         </button>
         <div className="ticks">{ticks}</div>
         <button type="button" className={`btn sm${compare ? " primary" : ""}`} onClick={() => setCompare((v) => !v)} aria-pressed={compare}
-          title="Swipe between two passes">{compare ? "Exit compare" : "Before / after"}</button>
+          title="Swipe between two passes"><IconSwipe /> {compare ? "Exit compare" : "Compare"}</button>
       </div>
     </main>
   );

@@ -30,7 +30,7 @@ function RiverCard({ o }: { o: OutlookFile | null }) {
         <div><h3>The river, next 30 days</h3><p className="sub">{g.name} · Copernicus GloFAS v4 · fetched {fmtDate(o.fetched_utc.slice(0, 10))}</p></div>
         <span className="pill blue">forecast</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 18, alignItems: "center" }}>
+      <div className="river-grid">
         <div style={{ textAlign: "center" }}>
           <Dial pct={g.today.pct} size={190} />
           <div style={{ fontFamily: "var(--display)", fontSize: 24, fontWeight: 600, textTransform: "capitalize", marginTop: -4 }}>{g.today.band}</div>
@@ -104,22 +104,23 @@ export default function Forecast() {
           <div className="seg" role="group" aria-label="River scenario">
             {(["auto", "river_rising", "river_not_rising"] as const).map((s) => (
               <button key={s} type="button" aria-pressed={scen === s} onClick={() => setScen(s)}>
-                {s === "auto" ? "Today's river" : s === "river_rising" ? "If the river rises" : "If it doesn't"}
+                {s === "auto" ? `Today (${pri?.scenario === "river_rising" ? "rising" : "falling"})` : s === "river_rising" ? "If the river rises" : "If it doesn't"}
+                {hz && <span className="seg-count"> · {hz.stretches.filter((x) => x.scenarios && x.scenarios[s === "auto" ? ((pri?.scenario as Scen | undefined) ?? "river_not_rising") : s].p >= 0.5).length} likely</span>}
               </button>
             ))}
           </div>
         </div>
 
         <section className="grid g-3">
-          <div className="card lift" style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          <div className="card lift ring-card">
             <Ring value={likely} total={rows.length} color="#cf4a2f" label={<><b>{likely}</b><span>of {rows.length}</span></>} />
             <div><h3>Likely to move</h3><p className="muted" style={{ margin: 0, fontSize: 13.5 }}>Stretches with a 50% or higher chance of moving 30 m+ by the next pass.</p></div>
           </div>
-          <div className="card lift" style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          <div className="card lift ring-card">
             <Ring value={(best.auc ?? 0.5) - 0.5} total={0.5} color="#7356d0" label={<><b>{best.auc ?? "–"}</b><span>AUC</span></>} />
             <div><h3>Tested, not guessed</h3><p className="muted" style={{ margin: 0, fontSize: 13.5 }}>On {best.n} checks it never saw, it ranked moving banks above stable ones {Math.round((best.auc ?? 0) * 100)}% of the time.</p></div>
           </div>
-          <div className="card lift" style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          <div className="card lift ring-card">
             <Ring value={ex?.totals.people_in_high_zone_est ?? 0} total={ex?.totals.people_est ?? 1} color="#7356d0"
               label={<><b>{ex ? nf(ex.totals.people_in_high_zone_est) : "–"}</b><span>people</span></>} />
             <div><h3>In the way</h3><p className="muted" style={{ margin: 0, fontSize: 13.5 }}>Live where the high-end forecast reaches within 36 days, out of {ex ? nf(ex.totals.people_est) : "–"} near the moving banks.</p></div>
@@ -135,6 +136,7 @@ export default function Forecast() {
             <RiverRibbon banklines={data.banklines} segs={segs.filter((s) => prob.has(s.id))} bbox={data.manifest.aoi_bbox} prob={prob} people={people}
               onPick={(id) => (window.location.href = `/map/?seg=${id}`)} />
             <RibbonLegend mode="prob" />
+            <div className="ribbon-hint">← swipe to see the whole river →</div>
           </div>
         </section>
 

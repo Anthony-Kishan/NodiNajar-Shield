@@ -17,6 +17,8 @@ export const IconDownload = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><p
 export const IconTrend = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>;
 export const IconUsers = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg>;
 export const IconChat = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>;
+export const IconCube = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="m12 2 9 5v10l-9 5-9-5V7z"/><path d="m3 7 9 5 9-5M12 12v10"/></svg>;
+export const IconSwipe = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M12 4v16"/><path d="m8 10-2 2 2 2M16 10l2 2-2 2"/></svg>;
 export const Mark = ({ size = 40 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true">
     <defs>
