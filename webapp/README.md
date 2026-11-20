@@ -50,3 +50,18 @@ dark background. Google's photorealistic 3D tiles need a Google Maps Platform ke
 - The header counts down to the next expected NISAR pass on track 69 (12-day repeat), from the current time.
 - Expected passes stay labelled "expected" until a real granule is processed.
 - `NEXT_PUBLIC_DATA_BASE` can point the app at another data folder or at the API's static data.
+
+## /docs (pitch deck + technical docs + live KPIs)
+
+`/docs` reads its numbers live from `public/data/*.json` and its commit log from GitHub. Text lives in `content/docs.ts`
+(team photos go in `public/team/`). Visibility is controlled in Vercel → Settings → Environment Variables:
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `DOCS_ENABLED` | `true` / `false` master switch | `true` |
+| `DOCS_START` | window opens (ISO with offset) | `2026-11-20T00:00:00+06:00` |
+| `DOCS_END` | window closes | `2027-01-31T23:59:59+06:00` |
+| `DOCS_DURATION_DAYS` | optional: window = start + N days | – |
+| `DOCS_ADMIN_TOKEN` | secret for `/docs/admin` sign-in (admins can preview while off) | – |
+
+Outside the window, or when off, visitors get a 403 page from `middleware.ts`.

@@ -22,6 +22,7 @@ const MORE = [
   { href: "/alerts/", label: "Alerts", sub: "Bangla and English SMS", icon: IconBell },
   { href: "/embankments/", label: "Embankments", sub: "Coming next: InSAR", icon: IconShield },
   { href: "/methods/", label: "Methods & data", sub: "How every number is made", icon: IconBook },
+  { href: "/docs/", label: "Docs & pitch", sub: "Pitch deck, architecture, live KPIs", icon: IconGrid },
 ];
 export const TABS = [...MAIN, ...MORE];
 
