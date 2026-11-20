@@ -12,3 +12,5 @@ fsspec>=2023.6
 aiohttp>=3.9
 requests>=2.31
 pyarrow>=14
+scikit-learn>=1.4
+mcp>=1.9
