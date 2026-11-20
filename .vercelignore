@@ -1,15 +1,17 @@
-# The web app is a static Next.js site in webapp/. Keep Vercel from turning the
-# Python API (api/) and pipeline into serverless functions.
-api/
-src/
-tests/
-tools/
-web/
-docs/
-ground_truth/
-aoi/
-cache/
-outputs/
-*.py
-requirements.txt
-docker-compose.yml
+# The web app is the Next.js app in webapp/. Keep Vercel from uploading the Python
+# pipeline and API. Patterns start with "/" so they match only at the repo root:
+# a bare "api/" would also drop webapp/app/api/ (the AI assistant route).
+/api/
+/src/
+/tests/
+/tools/
+/web/
+/docs/
+/ground_truth/
+/aoi/
+/cache/
+/outputs/
+/mcp_server/
+/*.py
+/requirements.txt
+/docker-compose.yml
