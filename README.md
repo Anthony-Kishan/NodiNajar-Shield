@@ -23,7 +23,7 @@ This repository builds on our earlier open-source project [NodiNajar](https://gi
 | River outlook | `src/compute/outlook.py`, `tools/fetch_outlook.py` | GloFAS v4 discharge vs 30+ years of the same days, 7-day trend, peak, basin rain; escalates watch stretches when the river rises |
 | Exposure | `src/compute/exposure.py`, `tools/fetch_osm_assets.py` | Homes and people inside the expected and high-end forecast zones; schools, mosques, health posts, markets |
 | Response planner | `src/compute/planner.py`, `webapp/lib/shield.ts` | Allocates crews and shelter places by expected people protected; same rules in Python and TypeScript (checked equal) |
-| AI assistant | `webapp/app/api/assistant/route.ts` | Tool-using Claude agent over 8 read-only tools, with retrieval over our docs and news reports and a number-grounding guardrail |
+| AI assistant | `webapp/app/api/assistant/route.ts` | Tool-using agent (Google Gemini or Anthropic Claude) over 8 read-only tools, with retrieval over our docs and news reports and a number-grounding guardrail |
 | MCP server | `mcp_server/server.py` | The same tools for Claude Desktop, Claude Code or any MCP client |
 | Web app | `webapp/app/{forecast,plan,assistant}` | Forecast, Response plan and Ask NodiNajar tabs; early-warning card on the Overview |
 
@@ -61,7 +61,7 @@ python -m src.agent.knowledge                          # knowledge base for the 
 cd webapp && npm install && npm run dev                # http://localhost:3000
 ```
 
-**Assistant:** set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`) in `webapp/.env.local` or in the Vercel project settings. Without a key the rest of the app works and the assistant page says it is not configured.
+**Assistant:** set one key in `webapp/.env.local` or in the Vercel project settings: `GEMINI_API_KEY` (free from Google AI Studio, default model `gemini-2.5-flash`, override with `GEMINI_MODEL`) or `ANTHROPIC_API_KEY` (Claude, override with `ANTHROPIC_MODEL`). If both are set, Claude is used. Without a key the rest of the app works and the assistant page says it is not configured.
 
 **MCP server:** `python -m mcp_server.server` (stdio) or `--http`. Claude Desktop config:
 
@@ -69,7 +69,7 @@ cd webapp && npm install && npm run dev                # http://localhost:3000
 {"mcpServers": {"nodinajar": {"command": "python", "args": ["-m", "mcp_server.server"], "cwd": "/path/to/NodiNajar-Shield"}}}
 ```
 
-**Deploy:** import the repo in Vercel with Root Directory `webapp`, add `ANTHROPIC_API_KEY`.
+**Deploy:** import the repo in Vercel with Framework Preset Next.js and Root Directory `webapp` (no build or output overrides), then add `GEMINI_API_KEY` or `ANTHROPIC_API_KEY`.
 
 **Rebuilding the radar results from NISAR** (Earthdata login needed) is documented in [`docs/COVERAGE.md`](docs/COVERAGE.md) and [`docs/METHODS.md`](docs/METHODS.md): `tools/fetch_subset.py`, then `python -m src.pipeline.build_demo` and `python -m src.pipeline.export_web`.
 
@@ -116,7 +116,7 @@ Other data:
 - Bangladesh Population and Housing Census 2022 (BBS): average household size 3.98
 - Basemaps: Esri World Imagery, Topographic, Street and Dark Gray Canvas; Sentinel-2 cloudless 2025 by EOX (CC BY-NC-SA 4.0); Mapzen Terrain Tiles on AWS Open Data
 - Bangladeshi newspaper reports of erosion, each linked in `ground_truth/events.csv`
-- Software: Next.js, MapLibre GL, deck.gl, Recharts, NumPy, SciPy, scikit-learn, h5py, MCP Python SDK; Anthropic Claude API for the assistant
+- Software: Next.js, MapLibre GL, deck.gl, Recharts, NumPy, SciPy, scikit-learn, h5py, MCP Python SDK; Google Gemini API or Anthropic Claude API for the assistant
 
 ## Team AlphaMatrix
 
