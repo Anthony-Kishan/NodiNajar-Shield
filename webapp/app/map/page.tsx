@@ -1,0 +1,227 @@
+"use client";
+import type React from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { ErrorBox, LevelPill, Loading, SegmentRow } from "@/components/Bits";
+import { RetreatChart } from "@/components/Charts";
+import { IconLayers, IconPause, IconPlay, IconX } from "@/components/Icons";
+import { CompareMap, RiverMap } from "@/components/MapClient";
+import type { Map as MLMap } from "maplibre-gl";
+import { DEFAULT_LAYERS, type MapLayers } from "@/lib/mapLayers";
+import { BASEMAPS, type BasemapId } from "@/lib/basemaps";
+import { useRiver } from "@/lib/data";
+import { useProof } from "@/lib/proof";
+import { useJson } from "@/lib/extra";
+import { fmtDate, latStr, lonStr, nf, parseDate } from "@/lib/format";
+
+// layers computed from NASA-ISRO NISAR carry a NASA tag
+const FROM_NISAR = new Set<keyof MapLayers>(["radar", "water", "loss", "banks", "firstBank", "segments"]);
+const LAYER_LABELS: [keyof MapLayers, string, string][] = [
+  ["radar", "NISAR radar (HH)", "#cfd8dc"],
+  ["water", "Water on this pass", "#57b8c9"],
+  ["loss", "Land the river took", "#e5533d"],
+  ["banks", "Outer bank on this pass", "#57d2e6"],
+  ["firstBank", "Bank on 18 Jun (compare)", "#ffffff"],
+  ["segments", "Bank stretches by risk", "#e9a93b"],
+  ["homes", "Homes near the new bank", "#f6d365"],
+];
+
+export default function MapPage() {
+  const { data, error } = useRiver();
+  const { forecast } = useProof();
+  const [pass, setPass] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [basemap, setBasemap] = useState<BasemapId>("satellite");
+  const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
+  const [opacity, setOpacity] = useState(0.7);
+  const [threeD, setThreeD] = useState(false);
+  const [sel, setSel] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [compare, setCompare] = useState(false);
+  const [before, setBefore] = useState(0);
+  const [mainMap, setMainMap] = useState<MLMap | null>(null);
+  const [channel, setChannel] = useState<"HH" | "HV">("HH");
+  const [leftSide, setLeftSide] = useState<"radar" | "optical">("radar");
+  const hls = useJson<{ by_pass: Record<string, { date: string; layer: string; sensor: string }> }>("hls.json");
+
+  const segs = useMemo(() => data?.segments.features.map((f) => f.properties) ?? [], [data]);
+  const P = data?.manifest.passes ?? [];
+  const idx = pass ?? Math.max(0, P.length - 1);
+
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const q = sp.get("seg");
+    if (q) setSel(q);
+    if (sp.get("compare") !== null) setCompare(true);
+    if (sp.get("compare") === "optical") setLeftSide("optical");
+  }, []);
+  useEffect(() => {
+    if (!playing || !P.length) return;
+    const t = setInterval(() => setPass((i) => ((i ?? 0) + 1) % P.length), 1400);
+    return () => clearInterval(t);
+  }, [playing, P.length]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (e.key === "ArrowRight") setPass((i) => Math.min(P.length - 1, (i ?? P.length - 1) + 1));
+      if (e.key === "ArrowLeft") setPass((i) => Math.max(0, (i ?? P.length - 1) - 1));
+      if (e.key === " ") { e.preventDefault(); setPlaying((v) => !v); }
+      if (e.key === "Escape") setSel(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [P.length]);
+
+  if (error) return <ErrorBox error={error} />;
+  if (!data) return <Loading what="the map" />;
+  const m = data.manifest;
+  const cur = P[idx];
+  const maxKm2 = Math.max(...P.map((p) => p.water_km2));
+  const s = segs.find((x) => x.id === sel) ?? null;
+
+  const ticks: React.ReactElement[] = [];
+  P.forEach((p, i) => {
+    if (i > 0) {
+      const gapDays = (parseDate(p.date).getTime() - parseDate(P[i - 1].date).getTime()) / 86_400_000;
+      if (gapDays > (m.track?.repeat_days ?? 12) + 1) {
+        ticks.push(<div key={`g${i}`} className="tick gap" title={`No NISAR pass for ${gapDays} days`}>
+          <span className="bar" style={{ height: 18 }} />no pass</div>);
+      }
+    }
+    ticks.push(
+      <button key={p.date} type="button" className="tick" aria-pressed={i === idx} onClick={() => { setPlaying(false); setPass(i); }}
+        title={`${fmtDate(p.date, true)}: ${p.water_km2} km² water`}>
+        <span className="bar" style={{ height: 8 + 30 * (p.water_km2 / maxKm2) }} />
+        {fmtDate(p.date)}
+      </button>,
+    );
+  });
+
+  return (
+    <main className="map-shell">
+      <RiverMap data={data} passIndex={idx} basemap={basemap} layers={layers} radarOpacity={opacity} channel={channel} threeD={threeD && !compare}
+        selectedId={sel} onSelect={(id) => setSel(id)} onMapReady={setMainMap} />
+      {compare && mainMap && (
+        <CompareMap data={data} main={mainMap} beforeIndex={Math.min(before, idx)} afterIndex={idx} basemap={basemap}
+          radarOpacity={layers.radar ? opacity : 0} showWater={layers.water}
+          optical={leftSide === "optical" ? hls?.by_pass[P[idx].date] ?? null : null} />
+      )}
+
+      <div className="float stamp" aria-live="polite">
+        <b className="num">{fmtDate(cur.date, true)}</b>
+        <span>Pass {idx + 1} of {P.length} · {nf(cur.water_km2, 1)} km² water · threshold {cur.threshold_db} dB</span>
+        <span className="dim" style={{ fontSize: 11.5, display: "block" }}>Radar: NASA-ISRO NISAR L2 GCOV (provisional){basemap === "nasa" ? " · Map: NASA GIBS VIIRS, same day" : ""}</span>
+      </div>
+
+      <aside className={`float panel-left${panelOpen ? " open" : ""}`} aria-label="Map layers">
+        <button type="button" className="sheet-toggle" onClick={() => setPanelOpen((v) => !v)} aria-expanded={panelOpen}>
+          <IconLayers /> {panelOpen ? "Hide layers" : "Layers and basemap"}
+        </button>
+        <div className="ctrl-title">Before / after</div>
+        <label className="toggle"><span><b>Swipe compare</b>: drag the divider to see the river on two dates</span>
+          <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} /></label>
+        {compare && (
+          <div className="compare-pick">
+            <span className="muted">Left side</span>
+            <select value={leftSide} onChange={(e) => setLeftSide(e.target.value as "radar" | "optical")} aria-label="Left side shows">
+              <option value="radar">An earlier NISAR pass</option>
+              <option value="optical" disabled={!hls}>NASA HLS optical, nearest clear day</option>
+            </select>
+            {leftSide === "radar" ? <>
+              <span className="muted">Before</span>
+              <select value={Math.min(before, idx)} onChange={(e) => setBefore(Number(e.target.value))} aria-label="Before pass">
+                {P.map((p, i) => <option key={p.date} value={i} disabled={i >= idx}>{fmtDate(p.date, true)}</option>)}
+              </select>
+            </> : <span className="muted">Optical from NASA HLS: what a camera saw within 6 days of the pass. Monsoon cloud is the point.</span>}
+            <span className="muted">After: pick a date on the timeline</span>
+          </div>
+        )}
+        <div className="ctrl-title">Basemap</div>
+        <div className="chips">
+          {BASEMAPS.map((b) => (
+            <button key={b.id} type="button" className="chip" aria-pressed={basemap === b.id} title={b.note} onClick={() => setBasemap(b.id)}>{b.name}{b.id === "nasa" && <span className="nasa-tag">NASA</span>}</button>
+          ))}
+        </div>
+        <div className="ctrl-title">Layers</div>
+        {LAYER_LABELS.map(([k, label, col]) => (
+          <label key={k} className="toggle">
+            <span><i className="swatch" style={{ background: col }} />{label}{FROM_NISAR.has(k) && <span className="nasa-tag" title="Computed from NASA-ISRO NISAR L2 GCOV">NASA</span>}</span>
+            <input type="checkbox" checked={layers[k]} onChange={(e) => setLayers({ ...layers, [k]: e.target.checked })} />
+          </label>
+        ))}
+        {P.some((p) => p.radar_hv) && <>
+          <div className="ctrl-title">Radar channel</div>
+          <div className="chips">
+            <button type="button" className="chip" aria-pressed={channel === "HH"} onClick={() => setChannel("HH")} title="HH: water is dark, land is bright">HH<span className="nasa-tag">NASA</span></button>
+            <button type="button" className="chip" aria-pressed={channel === "HV"} onClick={() => setChannel("HV")} title="HV: brighter where radar scatters inside crops and grass">HV<span className="nasa-tag">NASA</span></button>
+          </div>
+          <p className="note" style={{ marginTop: 6 }}>HH shows water against land. HV lights up vegetation, such as crops and grass on the chars.{channel === "HV" && !P[idx].radar_hv ? " HV is not exported for this pass; showing HH." : ""}</p>
+        </>}
+        <div className="ctrl-title">Radar opacity</div>
+        <input type="range" min={0} max={1} step={0.05} value={opacity} onChange={(e) => setOpacity(Number(e.target.value))} aria-label="Radar opacity" />
+        <div className="ctrl-title">View</div>
+        <label className="toggle"><span>3D: columns show how far each stretch moved{compare ? " (off while comparing)" : ""}</span>
+          <input type="checkbox" checked={threeD && !compare} disabled={compare} onChange={(e) => setThreeD(e.target.checked)} /></label>
+        <div className="ctrl-title">Legend</div>
+        <div style={{ display: "grid", gap: 4, fontSize: 12.5 }} className="muted">
+          <span><i className="swatch" style={{ background: "#e5533d", borderRadius: "50%" }} />High risk: moved ≥ 100 m, homes within 200 m</span>
+          <span><i className="swatch" style={{ background: "#e9a93b", borderRadius: "50%" }} />Watch: moved ≥ 30 m</span>
+          <span><i className="swatch" style={{ background: "#f6d365", borderRadius: "50%" }} />Home within 200 m of the new bank</span>
+        </div>
+        <p className="note">Radar: dark is water, bright is land. Keys: ← → step passes, space plays.</p>
+      </aside>
+
+      {s ? (
+        <aside className="float panel-right" aria-label="Selected bank stretch">
+          <div className="card-head">
+            <div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}><LevelPill level={s.level} /><span className="dim">#{s.rank} · {s.id}</span></div>
+              <h3 style={{ marginTop: 8, fontSize: 18 }}>{s.side === "west" ? "West" : "East"} bank, {latStr(s.centre[1])}</h3>
+            </div>
+            <button type="button" className="btn sm ghost" onClick={() => setSel(null)} aria-label="Close"><IconX /></button>
+          </div>
+          <div className="stat-2">
+            <div><div className="dim" style={{ fontSize: 12 }}>Bank moved</div><div className="num" style={{ fontSize: 28, fontWeight: 700 }}>{s.retreat_m} m</div></div>
+            <div><div className="dim" style={{ fontSize: 12 }}>Homes within 200 m</div><div className="num" style={{ fontSize: 28, fontWeight: 700 }}>{s.homes_near}</div></div>
+            <div><div className="dim" style={{ fontSize: 12 }}>Land taken</div><div className="num" style={{ fontSize: 18, fontWeight: 600 }}>{s.lost_ha} ha</div></div>
+            <div><div className="dim" style={{ fontSize: 12 }}>Location</div><div className="num" style={{ fontSize: 13.5 }}>{latStr(s.centre[1])}<br />{lonStr(s.centre[0])}</div></div>
+          </div>
+          <div className="dim" style={{ fontSize: 12.5, marginBottom: 4 }}>Bank position on each pass, metres into the land since 18 Jun</div>
+          <RetreatChart dates={P.map((p) => p.date)} history={s.history_m} level={s.level} height={170} />
+          <p className="note">A missing point means the bank line switched channel on that pass, so it is left out, not guessed.</p>
+          {(() => {
+            const f = forecast?.stretches.find((x) => x.id === s.id)?.forecast;
+            if (!f) return null;
+            if (!f.ok) return <p className="note">No forecast: {f.reason}.</p>;
+            const t = f.targets[Math.min(1, f.targets.length - 1)];
+            const base = f.last_measured.position_m;
+            return (
+              <p className="note"><b>Forecast (PROVISIONAL):</b> {f.advancing
+                ? <>about <b>{t.advance_m} m</b> further into the land by {fmtDate(t.date, true)} (range {Math.max(0, Math.round(t.low_m - base))}–{Math.round(t.high_m - base)} m), at {f.rate_m_per_12d} m per 12 days. <Link href="/proof/">How well has this worked?</Link></>
+                : <>the trend is not advancing on this stretch.</>}</p>
+            );
+          })()}
+          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            <Link className="btn sm primary" href={`/alerts/?seg=${s.id}`}>Alert for this stretch</Link>
+            <Link className="btn sm" href={`/banks/?seg=${s.id}`}>In the table</Link>
+          </div>
+        </aside>
+      ) : (
+        <aside className="float panel-right hide-sm" aria-label="Priority list" style={{ display: undefined }}>
+          <h3 style={{ margin: "0 0 4px" }}>Where to act first</h3>
+          <p className="sub muted" style={{ fontSize: 13, margin: "0 0 10px" }}>Click a stretch, or one on the map</p>
+          <ul className="list">{segs.slice(0, 8).map((x) => <li key={x.id}><SegmentRow s={x} onClick={() => setSel(x.id)} /></li>)}</ul>
+        </aside>
+      )}
+
+      <div className="float timeline-bar" role="group" aria-label="Radar passes">
+        <button type="button" className="play" onClick={() => setPlaying((v) => !v)} aria-label={playing ? "Pause" : "Play the season"}>
+          {playing ? <IconPause /> : <IconPlay />}
+        </button>
+        <div className="ticks">{ticks}</div>
+        <button type="button" className={`btn sm${compare ? " primary" : ""}`} onClick={() => setCompare((v) => !v)} aria-pressed={compare}
+          title="Swipe between two passes">{compare ? "Exit compare" : "Before / after"}</button>
+      </div>
+    </main>
+  );
+}

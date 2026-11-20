@@ -1,0 +1,86 @@
+import type { StyleSpecification } from "maplibre-gl";
+
+export type BasemapId = "satellite" | "nasa" | "sentinel" | "terrain" | "streets" | "dark";
+
+export const BASEMAPS: { id: BasemapId; name: string; note: string }[] = [
+  { id: "satellite", name: "Satellite", note: "Esri World Imagery, high-resolution photos" },
+  { id: "nasa", name: "NASA daily", note: "NASA GIBS: VIIRS true colour on the pass date. The monsoon clouds that NISAR's radar sees through." },
+  { id: "sentinel", name: "Sentinel-2", note: "EOX Sentinel-2 cloudless 2025, true colour" },
+  { id: "terrain", name: "Terrain", note: "Esri World Topographic with shaded relief" },
+  { id: "streets", name: "Streets", note: "Esri World Street Map" },
+  { id: "dark", name: "Dark", note: "Esri Dark Gray Canvas" },
+];
+
+// All basemaps are keyless. CARTO raster tiles now return an "API KEY REQUIRED" image
+// (checked 13 Oct 2026), so they are not used.
+const esri = (service: string) => [`https://server.arcgisonline.com/ArcGIS/rest/services/${service}/MapServer/tile/{z}/{y}/{x}`];
+const ESRI_ATTR = "Esri, Maxar, Earthstar Geographics, HERE, Garmin, © OpenStreetMap contributors";
+const LABELS = esri("Reference/World_Boundaries_and_Places");
+const DEM = {
+  type: "raster-dem" as const,
+  tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+  encoding: "terrarium" as const,
+  tileSize: 256,
+  maxzoom: 14,
+  attribution: "Elevation: Mapzen Terrain Tiles (AWS Open Data)",
+};
+
+/** NASA GIBS daily true-colour tiles (VIIRS on Suomi NPP) for one date, YYYY-MM-DD. Keyless, global, 375 m. */
+export const gibsTiles = (date: string) => [
+  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
+];
+export const GIBS_ATTR = 'Imagery: <a href="https://www.earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs">NASA GIBS</a>, VIIRS SNPP Corrected Reflectance';
+
+/** Raster-only styles (no fonts or sprites needed), each with a DEM source for hillshade and 3D terrain. */
+export function basemapStyle(id: BasemapId, date?: string): StyleSpecification {
+  const sources: StyleSpecification["sources"] = { dem: DEM };
+  const layers: StyleSpecification["layers"] = [{ id: "bg", type: "background", paint: { "background-color": "#0b161d" } }];
+  const raster = (key: string, tiles: string[], attribution: string, maxzoom = 19, paint: Record<string, unknown> = {}) => {
+    sources[key] = { type: "raster", tiles, tileSize: 256, maxzoom, attribution };
+    layers.push({ id: key, type: "raster", source: key, paint });
+  };
+  if (id === "satellite") {
+    raster("imagery", esri("World_Imagery"), "Imagery © Esri, Maxar, Earthstar Geographics", 19, { "raster-saturation": -0.1 });
+    raster("labels", LABELS, ESRI_ATTR, 19, { "raster-opacity": 0.9 });
+  } else if (id === "nasa") {
+    raster("imagery", gibsTiles(date ?? "2026-09-22"), GIBS_ATTR, 9);
+    raster("labels", LABELS, ESRI_ATTR, 19, { "raster-opacity": 0.9 });
+  } else if (id === "sentinel") {
+    raster("imagery", ["https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg"],
+      '<a href="https://s2maps.eu">Sentinel-2 cloudless 2025</a> by EOX (Copernicus Sentinel data 2025), CC BY-NC-SA 4.0', 15);
+    raster("labels", LABELS, ESRI_ATTR, 19, { "raster-opacity": 0.9 });
+  } else if (id === "terrain") {
+    raster("base", esri("World_Topo_Map"), ESRI_ATTR, 19, { "raster-opacity": 0.9 });
+    layers.push({ id: "hillshade", type: "hillshade", source: "dem",
+      paint: { "hillshade-exaggeration": 0.6, "hillshade-shadow-color": "#2b3a42", "hillshade-highlight-color": "#ffffff" } });
+  } else if (id === "streets") {
+    raster("base", esri("World_Street_Map"), ESRI_ATTR);
+  } else {
+    raster("base", esri("Canvas/World_Dark_Gray_Base"), ESRI_ATTR, 16);
+    raster("labels", esri("Canvas/World_Dark_Gray_Reference"), ESRI_ATTR, 16);
+  }
+  return { version: 8, sources, layers };
+}
+
+/** NASA HLS (Harmonized Landsat and Sentinel-2) true colour from GIBS for one day. layer = HLS_S30_... or HLS_L30_... */
+export const hlsTiles = (layer: string, date: string) => [
+  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer}/default/${date}/GoogleMapsCompatible_Level12/{z}/{y}/{x}.png`,
+];
+export const HLS_ATTR = 'Optical: <a href="https://www.earthdata.nasa.gov/data/projects/hls">NASA HLS</a> via NASA GIBS';
+
+/** A plain style with one optical HLS day (no radar), used on the left of the optical/radar swipe. */
+export function hlsStyle(layer: string, date: string): StyleSpecification {
+  return {
+    version: 8,
+    sources: {
+      base: { type: "raster", tiles: esri("World_Imagery"), tileSize: 256, maxzoom: 19, attribution: "Imagery © Esri, Maxar, Earthstar Geographics" },
+      hls: { type: "raster", tiles: hlsTiles(layer, date), tileSize: 256, maxzoom: 12, attribution: HLS_ATTR },
+      dem: DEM,
+    },
+    layers: [
+      { id: "bg", type: "background", paint: { "background-color": "#0b161d" } },
+      { id: "base", type: "raster", source: "base", paint: { "raster-opacity": 0.35, "raster-saturation": -1 } },
+      { id: "hls", type: "raster", source: "hls" },
+    ],
+  };
+}
