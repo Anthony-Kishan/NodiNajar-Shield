@@ -78,7 +78,7 @@ export function Footer() {
   return (
     <footer className="footer">
       Radar: NASA-ISRO NISAR L2 GCOV (provisional) via NASA ASF DAAC · Homes: Overture Maps (OpenStreetMap, Google, Microsoft) ·
-      Team AlphaMatrix · <a href="https://github.com/Anthony-Kishan/NodiNajar">Open source (Apache-2.0)</a>
+      Forecast: Copernicus GloFAS via Open-Meteo · Team AlphaMatrix · Open source (Apache-2.0)
     </footer>
   );
 }

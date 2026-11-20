@@ -80,7 +80,8 @@ export default function Methods() {
             <li>Homes: Overture Maps buildings (OpenStreetMap contributors, Google Open Buildings, Microsoft).</li>
             <li>Basemaps: Esri World Imagery; Sentinel-2 cloudless 2025 by EOX (CC BY-NC-SA 4.0); Esri World Topographic, World Street Map, Dark Gray Canvas and World Boundaries and Places labels (with OpenStreetMap data); Mapzen terrain tiles (AWS Open Data).</li>
             <li>Software: Next.js, MapLibre GL JS, deck.gl, Recharts; Python (NumPy, SciPy, h5py). Font: Hind Siliguri (SIL OFL).</li>
-            <li>Team AlphaMatrix.</li>
+            <li>River outlook: Copernicus Emergency Management Service GloFAS v4 river discharge and NOAA GFS precipitation, both via the Open-Meteo APIs. Population: Bangladesh Population and Housing Census 2022 household size (BBS).</li>
+            <li>Team AlphaMatrix. AI help is logged in docs/AI_USE.md.</li>
           </ul>
         </div>
       </main>
