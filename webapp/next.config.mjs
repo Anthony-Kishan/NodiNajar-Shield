@@ -1,6 +1,8 @@
-/** Static export: the whole app is plain files, so it runs on Vercel, GitHub Pages or a USB stick. */
+/**
+ * Server build (Vercel): pages are static and read public/data; /api/assistant runs as a serverless function.
+ * The original fully offline demo is web/index.html.
+ */
 const nextConfig = {
-  output: "export",
   trailingSlash: true,
   images: { unoptimized: true },
   reactStrictMode: true,

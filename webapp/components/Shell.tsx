@@ -5,11 +5,14 @@ import type { ReactNode } from "react";
 import { useNow, useRiver } from "@/lib/data";
 import { fmtDate } from "@/lib/format";
 import { nextPass } from "@/lib/schedule";
-import { IconBell, IconCheck, IconLayers, IconBook, IconGrid, IconMap, IconSat, IconShield, IconWaves, Mark } from "./Icons";
+import { IconBell, IconCheck, IconLayers, IconBook, IconChat, IconGrid, IconMap, IconSat, IconShield, IconTrend, IconUsers, IconWaves, Mark } from "./Icons";
 
 const TABS = [
   { href: "/", label: "Overview", icon: IconGrid },
   { href: "/map/", label: "Live map", icon: IconMap },
+  { href: "/forecast/", label: "Forecast", icon: IconTrend, tag: "AI" },
+  { href: "/plan/", label: "Response plan", icon: IconUsers },
+  { href: "/assistant/", label: "Ask NodiNajar", icon: IconChat, tag: "AI" },
   { href: "/banks/", label: "Bank stretches", icon: IconWaves },
   { href: "/passes/", label: "Radar passes", icon: IconSat },
   { href: "/why/", label: "Why it moves", icon: IconLayers },
@@ -51,7 +54,7 @@ export default function Shell({ children }: { children: ReactNode }) {
             <Mark />
             <div>
               <h1>NodiNajar<span lang="bn">নদীনজর</span></h1>
-              <p>Jamuna riverbank watch · Sirajganj, Bangladesh</p>
+              <p>Riverbank early warning · Jamuna, Sirajganj, Bangladesh</p>
             </div>
           </Link>
           <div className="header-spacer" />

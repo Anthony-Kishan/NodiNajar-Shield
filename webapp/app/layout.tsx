@@ -5,8 +5,8 @@ import Shell from "@/components/Shell";
 import { DataProvider } from "@/lib/data";
 
 export const metadata: Metadata = {
-  title: "NodiNajar · Jamuna riverbank watch",
-  description: "NISAR radar sees the Jamuna's banks through monsoon cloud. NodiNajar measures where the bank moves, ranks the stretches next to homes and drafts Bangla alerts.",
+  title: "NodiNajar · Riverbank early warning",
+  description: "NISAR radar sees the Jamuna's banks through monsoon cloud. NodiNajar measures where the bank moves, forecasts the next stretches with a back-tested ML model and a daily river outlook, counts the people in the way and plans where crews protect the most lives.",
   icons: { icon: "/favicon.svg" },
 };
 export const viewport: Viewport = { themeColor: "#0b161d", width: "device-width", initialScale: 1 };

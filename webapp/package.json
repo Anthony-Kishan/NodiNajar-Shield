@@ -1,12 +1,12 @@
 {
-  "name": "nodinajar-webapp",
+  "name": "nodinajar-shield-webapp",
   "version": "0.1.0",
   "private": true,
-  "description": "NodiNajar river watch: NISAR radar riverbank erosion dashboard (Next.js, MapLibre, deck.gl, Recharts)",
+  "description": "NodiNajar: radar riverbank early warning with ML forecast, river outlook, response planner and AI assistant (Next.js, MapLibre, deck.gl, Recharts)",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "npx serve out",
+    "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
