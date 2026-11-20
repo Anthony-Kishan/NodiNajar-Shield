@@ -1,126 +1,130 @@
-# NodiNajar (নদীনজর) · River Watch
+# NodiNajar (নদীনজর) · Riverbank early warning
 
-**Team AlphaMatrix**
+**Climate Shield: climate risk prediction and disaster early warning. Team AlphaMatrix.**
 
-NodiNajar uses NASA-ISRO NISAR L-band radar, which sees through monsoon cloud, to measure how far riverbanks move between passes. It marks 500 m cells where the bank is retreating toward homes and turns that into a Bangla voice and SMS alert. The proof site is the Jamuna River in Sirajganj, Bangladesh.
+Every monsoon the Jamuna takes homes, schools and farmland in Sirajganj, Bangladesh, often overnight. Today families mostly learn which bank is going from the river itself, or from the newspaper afterwards.
 
-> **Data status:** NISAR products are **provisional** (validated at a limited set of sites). The web app in `webapp/` (live at nodinajar.vercel.app) uses 8 real NISAR L2 GCOV passes over the Jamuna, 18 June to 22 September 2026. The older offline demo in `web/` can still run on synthetic test scenes, and then says SYNTHETIC on screen.
+NodiNajar watches the bank from orbit and warns before the land goes:
 
-## Run the demo (no internet needed)
+1. **Sense.** NASA-ISRO NISAR L-band radar sees through monsoon cloud. We measure how far every 500 m stretch of the outer bank moves between passes (8 passes, 18 Jun to 22 Sep 2026).
+2. **Predict.** A machine-learning model, back-tested against simple baselines, gives each stretch a probability of moving at least 30 m inland by the next pass. A daily river outlook (Copernicus GloFAS discharge, NOAA GFS rain) says whether that pass comes on a rising river.
+3. **Expose.** Homes (Overture Maps), people (homes × census household size) and critical assets (OpenStreetMap) inside the forecast loss zone.
+4. **Act.** Ranked priorities, a response planner that puts limited geobag crews and shelter places where they protect the most people, fixed-template Bangla/English alerts, and an AI assistant officials can question in Bangla or English.
 
-Open `web/index.html` in Chrome or Firefox. That's it: the data is inlined in `web/demo_fixtures/demo_data.js`.
+> **Data status:** NISAR products are **provisional**. Forecasts are labelled as forecasts; people counts are estimates. The ML model is trained on one monsoon; read [`docs/MODEL_CARD.md`](docs/MODEL_CARD.md) before relying on it.
 
-Drag the white handle to swipe between two radar passes. Click a red or amber cell to see its retreat chart and the Bangla alert. Open "Methods and data" for every processing step and the raw numbers.
+## What's new in this build
 
-## Setup for development
+This repository builds on our earlier open-source project [NodiNajar](https://github.com/Anthony-Kishan/NodiNajar) (NISAR pipeline, bank-line engine, first web app, trend forecast and news back-test). The first commit here imports that work unchanged; everything after it was built for this event:
+
+| Module | Code | What it does |
+| --- | --- | --- |
+| ML erosion-hazard model | `src/compute/hazard.py` | Gradient-boosted trees vs logistic regression vs three baselines, rolling-origin back-test, per-stretch drivers (occlusion) |
+| River outlook | `src/compute/outlook.py`, `tools/fetch_outlook.py` | GloFAS v4 discharge vs 30+ years of the same days, 7-day trend, peak, basin rain; escalates watch stretches when the river rises |
+| Exposure | `src/compute/exposure.py`, `tools/fetch_osm_assets.py` | Homes and people inside the expected and high-end forecast zones; schools, mosques, health posts, markets |
+| Response planner | `src/compute/planner.py`, `webapp/lib/shield.ts` | Allocates crews and shelter places by expected people protected; same rules in Python and TypeScript (checked equal) |
+| AI assistant | `webapp/app/api/assistant/route.ts` | Tool-using Claude agent over 8 read-only tools, with retrieval over our docs and news reports and a number-grounding guardrail |
+| MCP server | `mcp_server/server.py` | The same tools for Claude Desktop, Claude Code or any MCP client |
+| Web app | `webapp/app/{forecast,plan,assistant}` | Forecast, Response plan and Ask NodiNajar tabs; early-warning card on the Overview |
+
+### Back-test result (2026 monsoon)
+
+To score a pass, the model only saw labels known before it. 49 held-out checks on 3 passes:
+
+| Model | Brier (lower is better) | AUC |
+| --- | --- | --- |
+| **Gradient-boosted trees (shipped)** | **0.190** | **0.682** |
+| Logistic regression | 0.207 | 0.634 |
+| Base rate (no learning) | 0.263 | n/a |
+| Theil-Sen trend (our earlier forecast) | 0.367 | 0.512 |
+| Last interval repeats | 0.653 | 0.332 |
+
+Small sample, one season, stretches selected because they moved. Limits in the model card.
+
+## Run it
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate              # Windows: .venv\Scripts\activate
+python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-pytest -q                              # 23 tests, all should pass
+pytest -q                                              # all tests should pass
+
+# Optional live data (free, no account or key):
+python tools/fetch_outlook.py                          # GloFAS discharge + GFS rain  -> data/outlook_raw.json
+python tools/fetch_osm_assets.py                       # OpenStreetMap assets         -> data/osm_assets.json
+
+# Rebuild the outputs the app reads (webapp/public/data):
+python -m src.pipeline.scorecard                       # trend forecast + news back-test
+python -m src.pipeline.export_shield                   # hazard, exposure, outlook, priorities
+python -m src.agent.knowledge                          # knowledge base for the assistant
+
+# Web app
+cd webapp && npm install && npm run dev                # http://localhost:3000
 ```
 
-## Load real NISAR data (target: before 12 November)
+**Assistant:** set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`) in `webapp/.env.local` or in the Vercel project settings. Without a key the rest of the app works and the assistant page says it is not configured.
 
-We use **NISAR track 69, frame 14**: 8 GCOV dates from 18 June to 22 September 2026, each covering 100% of the Jamuna box (24.00–24.72° N, 89.60–89.92° E, Kazipur to Chauhali). Each file is about 7 GB, so we read only our box (about 2% of a frame) straight from NASA's servers. Details: [`docs/COVERAGE.md`](docs/COVERAGE.md).
+**MCP server:** `python -m mcp_server.server` (stdio) or `--http`. Claude Desktop config:
 
-```bash
-# 0. Real preview images for video and slides (no login, about 2 minutes)
-python tools/browse_previews.py
-
-# 1. Earthdata login: urs.earthdata.nasa.gov > profile > Generate Token
-export EARTHDATA_TOKEN="..."           # PowerShell: $env:EARTHDATA_TOKEN="..."
-
-# 2. Look inside one real file without downloading it (metadata + a quick-look of our box)
-python tools/inspect_h5.py "$(sed -n 2p docs/coverage/gcov_jamuna_track069_frame014.csv | cut -d, -f11)" --quicklook auto --db
-
-# 3. Pull our box from 2 dates, then all 8 (small .npz files in cache/subsets/)
-python tools/fetch_subset.py --csv docs/coverage/gcov_jamuna_track069_frame014.csv --limit 2
-python tools/fetch_subset.py --csv docs/coverage/gcov_jamuna_track069_frame014.csv
-
-# 4. Build the demo from the subsets (+ Open Buildings CSV for homes)
-python -m src.pipeline.build_demo --subsets cache/subsets/*.npz --buildings cache/open_buildings.csv
+```json
+{"mcpServers": {"nodinajar": {"command": "python", "args": ["-m", "mcp_server.server"], "cwd": "/path/to/NodiNajar-Shield"}}}
 ```
 
-Step 4 rewrites `web/demo_fixtures/`. The badge turns amber ("NISAR L-band GCOV - PROVISIONAL") and the footer credits NISAR.
+**Deploy:** import the repo in Vercel with Root Directory `webapp`, add `ANTHROPIC_API_KEY`.
 
-If step 2 or 3 can't find a layer, send the step 2 output to whoever maintains `src/acquire/nisar.py`. The provisional product layout may differ from what we expect.
-
-Homes and ground-truth events: step-by-step guide in [`docs/GUIDE_HOMES_AND_EVENTS.md`](docs/GUIDE_HOMES_AND_EVENTS.md).
-
-To search coverage again: `tools/asf_pass_dates.py` (dates per repeat cycle) and `tools/check_coverage.py` (track, frame and size per product).
+**Rebuilding the radar results from NISAR** (Earthdata login needed) is documented in [`docs/COVERAGE.md`](docs/COVERAGE.md) and [`docs/METHODS.md`](docs/METHODS.md): `tools/fetch_subset.py`, then `python -m src.pipeline.build_demo` and `python -m src.pipeline.export_web`.
 
 ## Repository layout
 
 ```
-.github/workflows/    runs the tests on every push
-aoi/                  area-of-interest boxes for the Jamuna and the Teesta
-cache/  outputs/      downloads and scratch output (gitignored)
-docs/                 methods, NISAR coverage, AI use log, Video 1 plan
-docs/coverage/        NISAR pass dates per reach (from the team's ASF search)
-ground_truth/         dated, sourced erosion and embankment events for the back-test
-src/acquire/          NISAR GCOV reader (crop to AOI, align grids)
-src/compute/          the science: water mask, outer bank lines, retreat per segment, homes near bank, risk. No AI.
-src/pipeline/         build_demo.py (scenes -> demo fixtures), synthetic.py (test scenes)
-tests/                unit tests for src/compute, the reader and the tools
-tools/                coverage search, box-only NISAR reader (fetch_subset), previews, HDF5 inspector, ground-truth checker
-web/                  offline demo: MapLibre swipe map, risk cells, Bangla alert
+src/compute/     the science, deterministic and tested: water mask, bank lines, retreat, trend forecast,
+                 news back-test, hazard model, river outlook, exposure, planner
+src/agent/       assistant tools, knowledge retrieval (TF-IDF), number-grounding guardrail
+src/pipeline/    exports for the web app (export_web, scorecard, export_shield)
+mcp_server/      MCP server over src/agent/tools.py
+tools/           NISAR coverage and box-only download, outlook and OpenStreetMap fetchers, checks
+webapp/          Next.js app (MapLibre GL, deck.gl, Recharts) + /api/assistant
+web/             fully offline demo (open web/index.html)
+api/             FastAPI + PostGIS scaffold
+ground_truth/    dated, sourced erosion reports from Bangladeshi newspapers
+docs/            methods, model card, coverage, AI use log
+tests/           pytest for everything in src/
 ```
+
+## Rules we follow
+
+- All numbers shown to users come from tested code in `src/compute`. **Language models never compute or invent a number.** Trained ML models are allowed when they are versioned, tested, back-tested against baselines and labelled as forecasts.
+- The assistant reads data only through tools and every number in its answers is checked against the tool results.
+- Alerts are fixed Bangla/English templates filled from computed numbers.
+- NISAR output is labelled PROVISIONAL, forecasts MODEL FORECAST, people counts estimates.
+- AI use is logged in [`docs/AI_USE.md`](docs/AI_USE.md).
+
+## Data and credits
+
+NASA data:
+
+- NASA-ISRO NISAR L-band L2 GCOV (HH, HV), track 69 frame 14, 8 passes, via the NASA Alaska Satellite Facility DAAC (provisional products)
+- NASA GIBS daily VIIRS (Suomi NPP) Corrected Reflectance true colour
+- NASA HLS v2.0 (Harmonized Landsat and Sentinel-2) true colour via NASA GIBS
+- NASA JPL OPERA DSWx-HLS surface water via NASA GIBS (independent check of our water masks)
+- NASA POWER daily precipitation (PRECTOTCORR; MERRA-2 and GEOS-IT)
+
+Other data:
+
+- Copernicus Emergency Management Service GloFAS v4 river discharge, via the Open-Meteo Flood API
+- NOAA GFS precipitation forecast, via the Open-Meteo API
+- Overture Maps buildings; OpenStreetMap contributors (ODbL) for critical assets
+- Bangladesh Population and Housing Census 2022 (BBS): average household size 3.98
+- Basemaps: Esri World Imagery, Topographic, Street and Dark Gray Canvas; Sentinel-2 cloudless 2025 by EOX (CC BY-NC-SA 4.0); Mapzen Terrain Tiles on AWS Open Data
+- Bangladeshi newspaper reports of erosion, each linked in `ground_truth/events.csv`
+- Software: Next.js, MapLibre GL, deck.gl, Recharts, NumPy, SciPy, scikit-learn, h5py, MCP Python SDK; Anthropic Claude API for the assistant
 
 ## Team AlphaMatrix
 
 | Member | Role |
 | --- | --- |
 | Kishan Modhu | Team lead, ML and back-test |
-| Kazi Majedul Islam | Backend, Reasercher, Geospatial |
-| Mahbub Al Hasan Akib | Radar lead (SAR), Video Editting |
-| Sajib Rahman | Full-stack, UI/UX |
+| Kazi Majedul Islam | Backend, research, geospatial |
+| Mahbub Al Hasan Akib | Radar (SAR), video editing |
 | Raihana Ferdosh | Story, video and presentation |
 
-How we work together: [`CONTRIBUTING.md`](CONTRIBUTING.md).
-
-## Rules we follow
-
-- All science lives in `src/compute`, in tested functions. AI tools never compute a number shown to users.
-- Every figure in the interface traces to `stats.json` (shown in the Methods drawer).
-- Alerts use fixed templates filled from computed numbers.
-- NISAR output is labelled provisional; synthetic output is labelled synthetic.
-- AI use is logged in `docs/AI_USE.md` as we go.
-
-## Data and credits
-
-NASA data:
-
-- NASA-ISRO NISAR L-band L2 GCOV (HH), track 69 frame 14, 8 passes, via the NASA Alaska Satellite Facility DAAC (provisional products)
-- NASA GIBS daily VIIRS (Suomi NPP) Corrected Reflectance true colour, the "NASA daily" map on each pass date
-- NASA HLS v2.0 (Harmonized Landsat and Sentinel-2) true colour via NASA GIBS, the optical side of the optical-and-radar swipe (`data/hls_days_2026.json`)
-- NASA JPL OPERA DSWx-HLS surface water via NASA GIBS, an independent check of our NISAR water masks (`tools/dswx_check.py`, `src/compute/validate.py`)
-- NASA POWER daily precipitation (PRECTOTCORR; MERRA-2 and GEOS-IT) at the box centre, rain before each pass (`data/nasa_power_precip_2026.json`, `src/compute/rain.py`)
-
-Other data:
-
-- Overture Maps buildings (homes near the bank), Overture Maps Foundation
-- Basemaps: Esri World Imagery, Topographic, Street and Dark Gray Canvas; Sentinel-2 cloudless 2025 by EOX (Copernicus Sentinel data, CC BY-NC-SA 4.0); Mapzen Terrain Tiles on AWS Open Data (built partly from NASA SRTM)
-- Bangladeshi newspaper reports of erosion, each linked in `ground_truth/events.csv`
-- Software: Next.js, MapLibre GL, deck.gl, Recharts, NumPy, h5py and the other libraries in `requirements.txt` and `webapp/package.json`
-
 Licence: Apache-2.0 (see `LICENSE`).
-
-## Web app (Next.js) and API
-
-The dashboard in `webapp/` is the blueprint front end: Next.js, MapLibre GL, deck.gl and Recharts, with satellite,
-Sentinel-2, terrain and street basemaps under the NISAR radar. Tabs: Overview, Live map, Bank stretches, Radar passes,
-Track record, Alerts, Embankments (next) and Methods & data. It works on phones, tablets and desktops.
-
-```bash
-python -m src.pipeline.export_web      # copy the latest results into webapp/public/data
-python -m src.pipeline.scorecard       # forecast + news back-test (Track record tab)
-cd webapp && npm install && npm run dev
-```
-
-Launch: `cd webapp && npx vercel --prod`, or import the repo in Vercel with Root Directory `webapp`. See `webapp/README.md`.
-
-The API (`api/`, FastAPI) serves the same results: `/stats`, `/passes`, `/schedule`, `/segments`, `/alerts/{id}`.
-`docker compose up -d` starts PostGIS, the API, Martin (vector tiles) and TiTiler (radar tiles); `python -m api.load_postgis`
-loads the results into PostGIS. The original offline demo in `web/` still opens by double-click.
