@@ -7,10 +7,10 @@ import { fmtDate, parseDate } from "@/lib/format";
 import { ErrorBar } from "recharts";
 import type { Level, Pass, SegmentProps } from "@/lib/types";
 
-const C = { grid: "#24404f", axis: "#93a9b4", water: "#57b8c9", red: "#e5533d", amber: "#e9a93b", green: "#6cc28f", home: "#f6d365" };
+const C = { grid: "#ebe4d7", axis: "#7d8b8e", water: "#0f7c8c", red: "#cf4a2f", amber: "#d0901c", green: "#3b8a5f", home: "#7356d0" };
 const LEVEL_C: Record<Level, string> = { red: C.red, amber: C.amber, green: C.green };
-const tip = { contentStyle: { background: "rgba(13,27,36,.96)", border: "1px solid #2f5163", borderRadius: 10, color: "#e8eef1", fontSize: 12.5 },
-  labelStyle: { color: "#93a9b4" }, itemStyle: { color: "#e8eef1" }, cursor: { stroke: "#2f5163" } };
+const tip = { contentStyle: { background: "#ffffff", border: "1px solid #e7e0d3", borderRadius: 14, color: "#15282e", fontSize: 12.5, boxShadow: "0 12px 32px rgba(21,40,46,.12)" },
+  labelStyle: { color: "#5d6e72", fontWeight: 600 }, itemStyle: { color: "#15282e" }, cursor: { stroke: "#d9cfbd" } };
 const axis = { stroke: C.axis, tick: { fill: C.axis, fontSize: 11.5 }, tickLine: false, axisLine: { stroke: C.grid } };
 
 /** Water in the box on each pass, by real date, with missing passes shaded. */
@@ -34,9 +34,9 @@ export function WaterChart({ passes, gaps, selected, height = 230 }: { passes: P
           tickFormatter={(t) => fmtDate(new Date(t))} ticks={rows.map((r) => r.t)} interval="preserveStartEnd" />
         <YAxis {...axis} width={48} tickFormatter={(v) => `${v}`} unit="" />
         <Tooltip {...tip} labelFormatter={(t) => fmtDate(new Date(Number(t)), true)} formatter={((v: number) => [`${v.toFixed(1)} km²`, "Water in box"]) as never} />
-        {selected !== undefined && <ReferenceLine x={rows[selected]?.t} stroke="#e8eef1" strokeDasharray="4 4" />}
+        {selected !== undefined && <ReferenceLine x={rows[selected]?.t} stroke="#15282e" strokeDasharray="4 4" />}
         <Area type="linear" dataKey="km2" stroke={C.water} strokeWidth={2.4} fill="url(#wfill)" isAnimationActive
-          dot={{ r: 3.5, fill: C.water, stroke: "#0b161d", strokeWidth: 1.5 }} activeDot={{ r: 6 }} />
+          dot={{ r: 3.5, fill: C.water, stroke: "#ffffff", strokeWidth: 1.5 }} activeDot={{ r: 6 }} />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -52,11 +52,11 @@ export function RetreatChart({ dates, history, level, height = 200 }: { dates: s
         <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} {...axis} tickFormatter={(t) => fmtDate(new Date(t))}
           ticks={[rows[0].t, rows[Math.floor(rows.length / 2)].t, rows[rows.length - 1].t]} />
         <YAxis {...axis} width={46} unit=" m" />
-        <ReferenceLine y={0} stroke="#2f5163" />
+        <ReferenceLine y={0} stroke="#d9cfbd" />
         <Tooltip {...tip} labelFormatter={(t) => fmtDate(new Date(Number(t)), true)}
           formatter={((v: number | null) => [v === null ? "bank not measured" : `${v} m`, "Bank moved"]) as never} />
         <Line type="linear" dataKey="m" stroke={LEVEL_C[level]} strokeWidth={2.6} connectNulls={false}
-          dot={{ r: 3.5, fill: LEVEL_C[level], stroke: "#0b161d" }} activeDot={{ r: 6 }} />
+          dot={{ r: 3.5, fill: LEVEL_C[level], stroke: "#ffffff" }} activeDot={{ r: 6 }} />
       </LineChart>
     </ResponsiveContainer>
   );
@@ -72,11 +72,11 @@ export function RiverProfile({ segs, onPick, height = 260 }: { segs: SegmentProp
         <XAxis dataKey="lat" type="number" domain={["dataMin - 0.02", "dataMax + 0.02"]} {...axis} tickFormatter={(v) => `${v.toFixed(2)}°N`} name="Latitude" />
         <YAxis dataKey="m" type="number" {...axis} width={50} unit=" m" name="Retreat" />
         <ZAxis dataKey="homes" range={[40, 520]} name="Homes" />
-        <ReferenceLine y={100} stroke={C.red} strokeDasharray="5 5" label={{ value: "100 m", fill: "#ff8b78", fontSize: 11, position: "right" }} />
+        <ReferenceLine y={100} stroke={C.red} strokeDasharray="5 5" label={{ value: "100 m", fill: "#cf4a2f", fontSize: 11, position: "right" }} />
         <Tooltip {...tip} cursor={{ strokeDasharray: "3 3" }}
           formatter={((v: number, n: string) => (n === "Latitude" ? [`${v.toFixed(3)}° N`, n] : n === "Retreat" ? [`${v} m`, n] : [v, "Homes within 200 m"])) as never} />
         <Scatter data={rows} onClick={((d: { id?: string }) => d?.id && onPick?.(d.id)) as never} cursor="pointer">
-          {rows.map((r) => <Cell key={r.id} fill={LEVEL_C[r.level]} fillOpacity={0.8} stroke="#0b161d" />)}
+          {rows.map((r) => <Cell key={r.id} fill={LEVEL_C[r.level]} fillOpacity={0.8} stroke="#ffffff" />)}
         </Scatter>
       </ScatterChart>
     </ResponsiveContainer>
@@ -130,8 +130,8 @@ export function ForecastCheckChart({ rows, height = 300 }: { rows: { id: string;
               </div>
             );
           }} />
-        <Scatter data={data} fill={C.water} stroke="#0b161d" strokeWidth={1.5}>
-          <ErrorBar dataKey="err" direction="y" width={0} stroke="#57b8c9" strokeOpacity={0.45} />
+        <Scatter data={data} fill={C.water} stroke="#ffffff" strokeWidth={1.5}>
+          <ErrorBar dataKey="err" direction="y" width={0} stroke="#0f7c8c" strokeOpacity={0.45} />
         </Scatter>
       </ScatterChart>
     </ResponsiveContainer>
@@ -150,8 +150,8 @@ export function RainChart({ daily, passDates, height = 220 }: { daily: { date: s
         <YAxis {...axis} width={48} unit="" />
         <Tooltip {...tip} cursor={{ fill: "rgba(87,184,201,.08)" }} labelFormatter={(t) => fmtDate(new Date(Number(t)), true)}
           formatter={((v: number) => [`${v} mm`, "Rain that day"]) as never} />
-        {passDates.map((d) => <ReferenceLine key={d} x={parseDate(d).getTime()} stroke="#e8eef1" strokeOpacity={0.35} strokeDasharray="3 3" />)}
-        <Bar dataKey="mm" fill="#6d9fd6" radius={[2, 2, 0, 0]} />
+        {passDates.map((d) => <ReferenceLine key={d} x={parseDate(d).getTime()} stroke="#15282e" strokeOpacity={0.35} strokeDasharray="3 3" />)}
+        <Bar dataKey="mm" fill="#5b8fd0" radius={[2, 2, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

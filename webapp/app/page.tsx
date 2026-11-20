@@ -1,122 +1,150 @@
 "use client";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ErrorBox, Kpi, Loading, SegmentRow } from "@/components/Bits";
-import { LevelBars, RiverProfile, WaterChart } from "@/components/Charts";
+import { ErrorBox, Loading } from "@/components/Bits";
+import { WaterChart } from "@/components/Charts";
 import { RiverMap } from "@/components/MapClient";
-import { DEFAULT_LAYERS } from "@/lib/mapLayers";
-import { Footer } from "@/components/Shell";
 import { NasaDataCard } from "@/components/NasaData";
-import { ShieldCard } from "@/components/ShieldCard";
-import { useNow, useRiver } from "@/lib/data";
+import { Footer } from "@/components/Shell";
+import { Bar, Dial, MapBoundary, People, RibbonLegend, Ring, RiverRibbon, probColor } from "@/components/Visuals";
+import { useRiver } from "@/lib/data";
+import { useJson } from "@/lib/extra";
 import { fmtDate, nf } from "@/lib/format";
-import { expectedPasses, gaps } from "@/lib/schedule";
+import { DEFAULT_LAYERS } from "@/lib/mapLayers";
+import { gaps } from "@/lib/schedule";
+import { pct, plan, type ExposureFile, type HazardFile, type OutlookFile, type PrioritiesFile } from "@/lib/shield";
+
+const TREND_ICON: Record<string, string> = { rising: "↗", falling: "↘", steady: "→", unknown: "·" };
 
 export default function Overview() {
   const { data, error } = useRiver();
-  const now = useNow(60_000);
+  const hz = useJson<HazardFile>("hazard.json");
+  const ex = useJson<ExposureFile>("exposure.json");
+  const pri = useJson<PrioritiesFile>("priorities.json");
+  const ol = useJson<OutlookFile>("outlook.json");
   const [sel, setSel] = useState<string | null>(null);
   const segs = useMemo(() => data?.segments.features.map((f) => f.properties) ?? [], [data]);
+  const people = useMemo(() => new Map((ex?.stretches ?? []).map((e) => [e.id, e.people_in_high_zone_est || e.people_est])), [ex]);
+
   if (error) return <ErrorBox error={error} />;
   if (!data) return <Loading />;
   const m = data.manifest, t = m.totals, P = m.passes;
   const first = P[0], last = P[P.length - 1];
-  const peak = P.reduce((a, b) => (b.water_km2 > a.water_km2 ? b : a));
-  const sched = expectedPasses(m, now, 2);
-  const measured = m.segments ? m.segments.ok + m.segments.jump + m.segments.gap : 0;
-  const top = segs.slice(0, 6);
-  const homesRed = segs.filter((s) => s.level === "red").reduce((a, s) => a + s.homes_near, 0);
+  const moving = t.cells_red + t.cells_amber;
+  const zone = ex?.totals.people_in_high_zone_est;
+  const likely = pri ? pri.stretches.filter((s) => s.p >= 0.5).length : null;
+  const plan5 = pri ? plan(pri.stretches, 5, 500) : null;
+  const top = pri
+    ? [...pri.stretches].sort((a, b) => Number(b.priority === "act now") - Number(a.priority === "act now") || b.p * (b.people_in_high_zone_est || 1) - a.p * (a.people_in_high_zone_est || 1)).slice(0, 5)
+    : [];
+  const segById = new Map(segs.map((s) => [s.id, s]));
+  const g = ol?.gauges[0];
 
   return (
     <>
       <main className="page">
-        <div className="page-head">
-          <div>
-            <h2>The Jamuna moved into the land along {t.cells_red + t.cells_amber} stretches this monsoon</h2>
-            <p>
-              Eight NISAR L-band radar passes, {fmtDate(first.date)} to {fmtDate(last.date, true)}, seen through cloud.
-              {" "}{t.cells_red} stretches are next to homes and need action first. Every number below is measured, not guessed.
-            </p>
+        {/* ---------------- hero ---------------- */}
+        <section className="card hero">
+          <div className="eyebrow">● NISAR L-band radar · {P.length} passes · {fmtDate(first.date)} – {fmtDate(last.date, true)}</div>
+          <h2>The Jamuna is eating into <em>{moving} stretches</em> of its banks{zone !== undefined && <>. <em>{nf(zone)} people</em> live where it could reach next</>}.</h2>
+          <p className="lede">Radar sees through monsoon cloud. AI forecasts which bank goes next. Officials get a plan and an alert before the land is gone.</p>
+          <div className="hero-stats">
+            <div className="hero-stat clay"><b>{t.cells_red}</b><span>high-risk stretches</span></div>
+            <div className="hero-stat gold"><b>{nf(t.land_lost_ha, 0)} ha</b><span>land taken this monsoon</span></div>
+            <div className="hero-stat"><b>{t.max_retreat_m} m</b><span>largest bank movement</span></div>
+            <div className="hero-stat lilac"><b>{nf(t.homes_near_new_bank)}</b><span>homes near the new bank</span></div>
+            <div style={{ flex: 1 }} />
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <Link className="btn primary" href="/forecast/">See the forecast →</Link>
+              <Link className="btn" href="/map/">Open the map</Link>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link className="btn primary" href="/map/">Open the live map</Link>
-            <Link className="btn" href="/alerts/">See the alerts</Link>
+          <div className="ribbon-wrap">
+            <RiverRibbon banklines={data.banklines} segs={segs} bbox={m.aoi_bbox} people={people} selected={sel}
+              onPick={(id) => setSel(id === sel ? null : id)} dark />
+            <RibbonLegend mode="level" dark />
           </div>
-        </div>
-
-        <section className="grid g-4" aria-label="Season totals">
-          <Kpi label="High-risk stretches" value={t.cells_red} unit={`of ${t.cells_red + t.cells_amber}`} accent="var(--erosion)"
-            foot={<>Moved ≥ 100 m with homes within 200 m · {nf(homesRed)} homes</>} />
-          <Kpi label="Land the river took" value={nf(t.land_lost_ha, 1)} unit="ha" accent="var(--watch)" foot={<>Outer banks only, confirmed on the last two passes</>} />
-          <Kpi label="Largest bank movement" value={t.max_retreat_m} unit="m" accent="var(--monsoon)" foot={<>Over {m.period_days} days, one 500 m stretch</>} />
-          <Kpi label="Homes near the new bank" value={nf(t.homes_near_new_bank)} accent="var(--home)" foot={<>Overture Maps buildings within 200 m</>} />
         </section>
 
-        <section style={{ marginTop: 16 }}><ShieldCard /></section>
+        {/* ---------------- three visual answers ---------------- */}
+        <section className="grid g-3" style={{ marginTop: 18 }}>
+          <div className="card tint-clay lift">
+            <div className="card-head"><div><h3>Act first</h3><p className="sub">Highest priority this week</p></div><Link className="btn sm" href="/plan/">Plan →</Link></div>
+            <div className="prob-list">
+              {top.map((p, i) => {
+                const s = segById.get(p.id);
+                return (
+                  <Link key={p.id} href={`/map/?seg=${p.id}`} className="prob-row" style={{ gridTemplateColumns: "26px 1fr 56px", background: "rgba(255,255,255,.75)" }}>
+                    <span className={`rank ${p.level}`}>{i + 1}</span>
+                    <span>
+                      <b>{p.id}</b> <span className="muted" style={{ fontSize: 12.5 }}>{s?.side === "west" ? "West" : "East"} bank · {nf(p.people_in_high_zone_est)} people</span>
+                      <div style={{ marginTop: 6 }}><Bar value={p.p} color={probColor(p.p)} /></div>
+                    </span>
+                    <span className="prob-pct">{pct(p.p)}</span>
+                  </Link>
+                );
+              })}
+              {!top.length && <p className="muted">Loading priorities…</p>}
+            </div>
+          </div>
 
-        <section style={{ marginTop: 16 }}><NasaDataCard /></section>
+          <div className="card tint-river lift" style={{ display: "flex", flexDirection: "column" }}>
+            <div className="card-head"><div><h3>The river today</h3><p className="sub">{g ? `${g.name} · Copernicus GloFAS` : "Daily river forecast"}</p></div>
+              <span className="pill blue">forecast</span></div>
+            {g ? (
+              <div style={{ display: "grid", placeItems: "center", flex: 1 }}>
+                <Dial pct={g.today.pct} />
+                <div style={{ textAlign: "center", marginTop: -6 }}>
+                  <div style={{ fontFamily: "var(--display)", fontSize: 30, fontWeight: 600, textTransform: "capitalize" }}>{g.today.band} {TREND_ICON[g.trend_7d.trend]}</div>
+                  <div className="muted" style={{ fontSize: 13.5 }}>{nf(g.today.q)} m³/s · {g.trend_7d.trend} over the next 7 days{g.trend_7d.change_pct !== null && ` (${g.trend_7d.change_pct > 0 ? "+" : ""}${g.trend_7d.change_pct}%)`}</div>
+                </div>
+              </div>
+            ) : <p className="muted">River outlook not fetched yet.</p>}
+          </div>
 
-        <section className="grid g-3" style={{ marginTop: 16 }}>
+          <div className="card tint-people lift">
+            <div className="card-head"><div><h3>What the AI expects</h3><p className="sub">Next radar pass, after {fmtDate(last.date)}</p></div><span className="pill violet">AI</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+              <Ring value={likely ?? 0} total={pri?.stretches.length ?? 1} color="#cf4a2f"
+                label={<><b>{likely ?? "–"}</b><span>of {pri?.stretches.length ?? "–"} likely<br />to move</span></>} />
+              <div style={{ flex: 1 }}>
+                <div className="muted" style={{ fontSize: 13 }}>Back-test score</div>
+                <div style={{ fontFamily: "var(--display)", fontSize: 26, fontWeight: 600 }}>{hz ? hz.backtest.models[hz.model].auc : "–"} <span className="muted" style={{ fontSize: 13, fontFamily: "var(--font)" }}>AUC</span></div>
+                <div style={{ marginTop: 6 }}><Bar value={(hz?.backtest.models[hz.model].auc ?? 0.5) - 0.5} max={0.5} color="#7356d0" /></div>
+                <div className="dim" style={{ fontSize: 11.5, marginTop: 4 }}>coin flip ← → perfect</div>
+              </div>
+            </div>
+            {plan5 && (
+              <div style={{ marginTop: 16 }}>
+                <People n={20} filled={Math.round((plan5.share_covered ?? 0) * 20)} />
+                <div style={{ fontSize: 13.5, marginTop: 8 }}><b>5 crews + 500 shelter places</b> reach <b>{pct(plan5.share_covered ?? 0)}</b> of the people at risk.</div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ---------------- map + monsoon ---------------- */}
+        <section className="grid g-3" style={{ marginTop: 18 }}>
           <div className="card span-2" style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-            <div style={{ padding: "16px 18px 10px" }} className="card-head">
-              <div><h3>Where the bank moved</h3><p className="sub" style={{ margin: 0 }}>Satellite view with the radar change on top. Click a stretch.</p></div>
+            <div style={{ padding: "18px 22px 12px" }} className="card-head">
+              <div><h3>Satellite view</h3><p className="sub" style={{ margin: 0 }}>The bank on 18 June and today, over satellite imagery</p></div>
               <Link className="btn sm" href={sel ? `/map/?seg=${sel}` : "/map/"}>Full map →</Link>
             </div>
-            <div className="map-mini" style={{ borderRadius: 0, border: 0, borderTop: "1px solid var(--line)" }}>
-              <RiverMap data={data} passIndex={P.length - 1} basemap="satellite" layers={{ ...DEFAULT_LAYERS, radar: false, firstBank: true }}
-                radarOpacity={0.8} threeD={false} selectedId={sel} onSelect={setSel} compact />
+            <div className="map-mini" style={{ borderRadius: 0, border: 0 }}>
+              <MapBoundary>
+                <RiverMap data={data} passIndex={P.length - 1} basemap="satellite" layers={{ ...DEFAULT_LAYERS, radar: false, firstBank: true }}
+                  radarOpacity={0.8} threeD={false} selectedId={sel} onSelect={setSel} compact />
+              </MapBoundary>
             </div>
           </div>
           <div className="card">
-            <div className="card-head"><div><h3>Where to act first</h3><p className="sub">Ranked: red first, then by how far the bank moved</p></div></div>
-            <ul className="list">
-              {top.map((s) => <li key={s.id}><SegmentRow s={s} current={sel === s.id} onClick={() => setSel(s.id)} /></li>)}
-            </ul>
-            <Link href="/banks/" className="btn ghost sm" style={{ marginTop: 10 }}>All {segs.length} stretches →</Link>
-          </div>
-        </section>
-
-        <section className="grid g-3" style={{ marginTop: 16 }}>
-          <div className="card span-2">
             <h3>The monsoon, pass by pass</h3>
-            <p className="sub">Water inside the box. The river grows to {nf(peak.water_km2)} km² on {fmtDate(peak.date)}, more than twice its June size, then falls back. That swelling is flooding, not erosion, so it is not counted.</p>
-            <WaterChart passes={P} gaps={gaps(m)} />
-          </div>
-          <div className="card">
-            <h3>Radar schedule</h3>
-            <p className="sub">NISAR repeats track {m.track?.track} every {m.track?.repeat_days} days</p>
-            <ul className="list">
-              <li className="row-link" style={{ cursor: "default" }}>
-                <span className="rank" style={{ color: "var(--ok)" }}>✓</span>
-                <span className="row-main"><b>{P.length} passes processed</b><div>{fmtDate(first.date)} – {fmtDate(last.date, true)}</div></span>
-                <span className="pill green">done</span>
-              </li>
-              {sched.map((s) => (
-                <li key={s.date} className="row-link" style={{ cursor: "default" }}>
-                  <span className="rank">{s.status === "upcoming" ? "◷" : "…"}</span>
-                  <span className="row-main"><b>{fmtDate(s.date, true)}</b>
-                    <div>{s.status === "upcoming" ? `expected in ${Math.ceil(s.daysAway)} day${Math.ceil(s.daysAway) === 1 ? "" : "s"}` : "expected, not processed yet"}</div></span>
-                  <span className={`pill ${s.status === "upcoming" ? "blue" : "grey"}`}>{s.status === "upcoming" ? "next" : "to fetch"}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="note">Expected dates follow the 12-day repeat. A pass counts only after its granule is downloaded and processed.</p>
+            <p className="sub">River water in the box (km²). Swelling is flooding, not erosion, and is not counted.</p>
+            <WaterChart passes={P} gaps={gaps(m)} height={300} />
           </div>
         </section>
 
-        <section className="grid g-3" style={{ marginTop: 16 }}>
-          <div className="card span-2">
-            <h3>Along the river, south to north</h3>
-            <p className="sub">Each dot is a 500 m stretch that moved at least 30 m. Bigger dots have more homes nearby. Click one to open it on the map.</p>
-            <RiverProfile segs={segs} onPick={(id) => (window.location.href = `/map/?seg=${id}`)} />
-          </div>
-          <div className="card">
-            <h3>Stretches by bank</h3>
-            <p className="sub">{measured} stretches checked; {m.segments?.jump ?? 0} skipped where the bank switched channel</p>
-            <LevelBars segs={segs} />
-            <p className="note warn">NISAR data is provisional. Thresholds are starting values until the back-test against 2026 reports.</p>
-          </div>
-        </section>
+        <section style={{ marginTop: 18 }}><NasaDataCard /></section>
       </main>
       <Footer />
     </>

@@ -6,6 +6,7 @@ import { ErrorBox, LevelPill, Loading, SegmentRow } from "@/components/Bits";
 import { RetreatChart } from "@/components/Charts";
 import { IconLayers, IconPause, IconPlay, IconX } from "@/components/Icons";
 import { CompareMap, RiverMap } from "@/components/MapClient";
+import { MapBoundary } from "@/components/Visuals";
 import type { Map as MLMap } from "maplibre-gl";
 import { DEFAULT_LAYERS, type MapLayers } from "@/lib/mapLayers";
 import { BASEMAPS, type BasemapId } from "@/lib/basemaps";
@@ -98,9 +99,11 @@ export default function MapPage() {
   });
 
   return (
-    <main className="map-shell">
-      <RiverMap data={data} passIndex={idx} basemap={basemap} layers={layers} radarOpacity={opacity} channel={channel} threeD={threeD && !compare}
-        selectedId={sel} onSelect={(id) => setSel(id)} onMapReady={setMainMap} />
+    <main className="map-shell dark-scope">
+      <MapBoundary>
+        <RiverMap data={data} passIndex={idx} basemap={basemap} layers={layers} radarOpacity={opacity} channel={channel} threeD={threeD && !compare}
+          selectedId={sel} onSelect={(id) => setSel(id)} onMapReady={setMainMap} />
+      </MapBoundary>
       {compare && mainMap && (
         <CompareMap data={data} main={mainMap} beforeIndex={Math.min(before, idx)} afterIndex={idx} basemap={basemap}
           radarOpacity={layers.radar ? opacity : 0} showWater={layers.water}

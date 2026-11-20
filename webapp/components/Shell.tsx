@@ -7,20 +7,23 @@ import { fmtDate } from "@/lib/format";
 import { nextPass } from "@/lib/schedule";
 import { IconBell, IconCheck, IconLayers, IconBook, IconChat, IconGrid, IconMap, IconSat, IconShield, IconTrend, IconUsers, IconWaves, Mark } from "./Icons";
 
-const TABS = [
+const MAIN = [
   { href: "/", label: "Overview", icon: IconGrid },
-  { href: "/map/", label: "Live map", icon: IconMap },
-  { href: "/forecast/", label: "Forecast", icon: IconTrend, tag: "AI" },
-  { href: "/plan/", label: "Response plan", icon: IconUsers },
-  { href: "/assistant/", label: "Ask NodiNajar", icon: IconChat, tag: "AI" },
-  { href: "/banks/", label: "Bank stretches", icon: IconWaves },
-  { href: "/passes/", label: "Radar passes", icon: IconSat },
-  { href: "/why/", label: "Why it moves", icon: IconLayers },
-  { href: "/proof/", label: "Track record", icon: IconCheck },
-  { href: "/alerts/", label: "Alerts", icon: IconBell },
-  { href: "/embankments/", label: "Embankments", icon: IconShield, tag: "next" },
-  { href: "/methods/", label: "Methods & data", icon: IconBook },
+  { href: "/map/", label: "Map", icon: IconMap },
+  { href: "/forecast/", label: "Forecast", icon: IconTrend, ai: true },
+  { href: "/plan/", label: "Plan", icon: IconUsers },
+  { href: "/assistant/", label: "Ask", icon: IconChat, ai: true },
 ];
+const MORE = [
+  { href: "/banks/", label: "Bank stretches", sub: "Every 500 m stretch, ranked", icon: IconWaves },
+  { href: "/passes/", label: "Radar passes", sub: "The 8 NISAR images, side by side", icon: IconSat },
+  { href: "/why/", label: "Why it moves", sub: "Rain, river level and the bank", icon: IconLayers },
+  { href: "/proof/", label: "Track record", sub: "Back-test against news reports", icon: IconCheck },
+  { href: "/alerts/", label: "Alerts", sub: "Bangla and English SMS", icon: IconBell },
+  { href: "/embankments/", label: "Embankments", sub: "Coming next: InSAR", icon: IconShield },
+  { href: "/methods/", label: "Methods & data", sub: "How every number is made", icon: IconBook },
+];
+export const TABS = [...MAIN, ...MORE];
 
 function countdown(days: number): string {
   const s = Math.max(0, Math.round(days * 86400));
@@ -46,6 +49,8 @@ function LiveStatus() {
 export default function Shell({ children }: { children: ReactNode }) {
   const path = usePathname() || "/";
   const norm = (p: string) => (p.endsWith("/") ? p : p + "/");
+  const isActive = (href: string) => (href === "/" ? norm(path) === "/" : norm(path).startsWith(href));
+  const moreActive = MORE.some((t) => isActive(t.href));
   return (
     <>
       <header className="header">
@@ -54,25 +59,39 @@ export default function Shell({ children }: { children: ReactNode }) {
             <Mark />
             <div>
               <h1>NodiNajar<span lang="bn">নদীনজর</span></h1>
-              <p>Riverbank early warning · Jamuna, Sirajganj, Bangladesh</p>
+              <p>Riverbank early warning · Jamuna, Bangladesh</p>
             </div>
           </Link>
+          <div className="header-spacer" />
+          <nav className="nav" aria-label="Sections">
+            {MAIN.map(({ href, label, icon: I, ai }) => (
+              <Link key={href} href={href} className={isActive(href) ? "active" : undefined} aria-current={isActive(href) ? "page" : undefined}>
+                <I /> {label} {ai && <span className="ai">AI</span>}
+              </Link>
+            ))}
+            <details className="more" key={path}>
+              <summary className={moreActive ? "active" : undefined}>More ▾</summary>
+              <div className="more-menu">
+                {MORE.map(({ href, label, sub, icon: I }) => (
+                  <Link key={href} href={href} className={isActive(href) ? "active" : undefined}>
+                    <span className="ico"><I /></span>
+                    <span>{label}<small>{sub}</small></span>
+                  </Link>
+                ))}
+              </div>
+            </details>
+          </nav>
           <div className="header-spacer" />
           <LiveStatus />
           <span className="badge" title="NISAR science data is provisional (validated at a limited set of sites)">NISAR · PROVISIONAL</span>
         </div>
-        <nav className="tabs" aria-label="Sections">
-          {TABS.map(({ href, label, icon: I, tag }) => {
-            const active = href === "/" ? norm(path) === "/" : norm(path).startsWith(href);
-            return (
-              <Link key={href} href={href} className={`tab${active ? " active" : ""}`} aria-current={active ? "page" : undefined}>
-                <I /> {label} {tag && <span className="tag">{tag}</span>}
-              </Link>
-            );
-          })}
-        </nav>
       </header>
       {children}
+      <nav className="mobile-nav" aria-label="Sections (mobile)">
+        {[...MAIN.slice(0, 4), { href: "/assistant/", label: "Ask", icon: IconChat, ai: true }].map(({ href, label, icon: I }) => (
+          <Link key={href} href={href} className={isActive(href) ? "active" : undefined}><I /> {label}</Link>
+        ))}
+      </nav>
     </>
   );
 }

@@ -1,12 +1,23 @@
 "use client";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ErrorBox, Kpi, Loading } from "@/components/Bits";
+import { ErrorBox, Loading } from "@/components/Bits";
 import { Footer } from "@/components/Shell";
+import { Bar, People, PersonGlyph, RibbonLegend, Ring, RiverRibbon, probColor } from "@/components/Visuals";
 import { useRiver } from "@/lib/data";
 import { useJson } from "@/lib/extra";
 import { latStr, nf } from "@/lib/format";
 import { pct, plan, type ExposureFile, type HazardFile, type PrioritiesFile } from "@/lib/shield";
+
+function Stepper({ value, set, step, min, max, label }: { value: number; set: (v: number) => void; step: number; min: number; max: number; label: string }) {
+  return (
+    <div className="stepper">
+      <button type="button" aria-label={`Fewer ${label}`} onClick={() => set(Math.max(min, value - step))}>−</button>
+      <span className="val num">{nf(value)}</span>
+      <button type="button" aria-label={`More ${label}`} onClick={() => set(Math.min(max, value + step))}>+</button>
+    </div>
+  );
+}
 
 export default function PlanPage() {
   const { data, error } = useRiver();
@@ -27,74 +38,98 @@ export default function PlanPage() {
     }));
   }, [hz, ex, scen]);
   const result = useMemo(() => plan(input, crews, shelter), [input, crews, shelter]);
+  const marks = useMemo(() => new Map(result.actions.map((a) => [a.id, a.action])), [result]);
+  const people = useMemo(() => new Map((ex?.stretches ?? []).map((e) => [e.id, e.people_in_high_zone_est || e.people_est])), [ex]);
 
   if (error) return <ErrorBox error={error} />;
   if (!data || !hz || !ex) return <Loading what="the response plan" />;
-  const seg = new Map(data.segments.features.map((f) => [f.properties.id, f.properties]));
+  const segs = data.segments.features.map((f) => f.properties);
+  const seg = new Map(segs.map((s) => [s.id, s]));
   const exp = new Map(ex.stretches.map((x) => [x.id, x]));
   const prob = new Map(input.map((x) => [x.id, x.p]));
+  const share = result.share_covered ?? 0;
+  const crewActs = result.actions.filter((a) => a.action === "geobags");
+  const evacActs = result.actions.filter((a) => a.action === "evacuate");
 
   return (
     <>
       <main className="page">
         <div className="page-head">
           <div>
-            <h2>Response plan: protect the most people</h2>
-            <p>Set how many emergency crews (each can place geobags on one 500 m stretch) and shelter places you have this week. The planner puts them where the expected number of people protected is highest: probability of the bank moving × people in the forecast loss zone.</p>
+            <div className="eyebrow">Response planner</div>
+            <h2>Put limited help where it protects the most people</h2>
+            <p>Tell NodiNajar what you have this week. It sends each crew and shelter place to where the chance of the bank moving × the people in the way is highest.</p>
           </div>
           <div className="seg" role="group" aria-label="River scenario">
-            <button type="button" aria-pressed={rising === null} onClick={() => setRising(null)}>From outlook</button>
-            <button type="button" aria-pressed={rising === true} onClick={() => setRising(true)}>River rising</button>
-            <button type="button" aria-pressed={rising === false} onClick={() => setRising(false)}>Not rising</button>
+            <button type="button" aria-pressed={rising === null} onClick={() => setRising(null)}>Today&apos;s river</button>
+            <button type="button" aria-pressed={rising === true} onClick={() => setRising(true)}>If it rises</button>
+            <button type="button" aria-pressed={rising === false} onClick={() => setRising(false)}>If it doesn&apos;t</button>
           </div>
         </div>
 
-        <section className="grid g-4">
-          <Kpi label="People near the moving banks" value={nf(ex.totals.people_est)} accent="var(--home)" foot={<>{nf(ex.totals.homes)} homes within 200 m of the new bank</>} />
-          <Kpi label="People in the 36-day zone" value={nf(ex.totals.people_in_high_zone_est)} accent="var(--erosion)" foot={<>Homes the high-end forecast reaches by {ex.horizon ?? "the third pass"}</>} />
-          <Kpi label="Expected people covered" value={nf(result.expected_people_covered, 1)} unit={`of ${nf(result.expected_people_total, 1)}`} accent="var(--ok)" foot={<>{result.share_covered === null ? "–" : pct(result.share_covered)} of the expected total with this plan</>} />
-          <Kpi label="Shelter places left" value={nf(result.shelter_unused)} accent="var(--monsoon)" foot={<>Of {nf(shelter)} available</>} />
+        <section className="grid g-3">
+          <div className="card">
+            <h3>What you have</h3>
+            <p className="sub">Planning inputs you set. Nothing here is measured.</p>
+            <div className="res-block">
+              <div className="res-label"><span className="lvl-dot red" /> Geobag crews <span className="dim" style={{ fontWeight: 500 }}>· one 500 m stretch each</span></div>
+              <Stepper value={crews} set={setCrews} step={1} min={0} max={20} label="crews" />
+              <input type="range" min={0} max={20} value={crews} onChange={(e) => setCrews(Number(e.target.value))} aria-label="Geobag crews" style={{ marginTop: 10 }} />
+            </div>
+            <div className="res-block">
+              <div className="res-label"><span className="lvl-dot" style={{ background: "#7356d0" }} /> Shelter places</div>
+              <Stepper value={shelter} set={setShelter} step={50} min={0} max={3000} label="shelter places" />
+              <input type="range" min={0} max={3000} step={50} value={shelter} onChange={(e) => setShelter(Number(e.target.value))} aria-label="Shelter places" style={{ marginTop: 10 }} />
+            </div>
+          </div>
+
+          <div className="card tint-people span-2" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 26, alignItems: "center" }}>
+            <Ring value={share} total={1} size={190} stroke={18} color="#7356d0" label={<><b style={{ fontSize: 40 }}>{pct(share)}</b><span>of people at risk<br />covered</span></>} />
+            <div>
+              <h3 style={{ fontSize: 24 }}>This plan reaches {pct(share)} of the expected people at risk</h3>
+              <p className="muted" style={{ margin: "4px 0 14px" }}>{nf(result.expected_people_covered, 0)} of {nf(result.expected_people_total, 0)} people the model expects to be hit, weighted by chance.</p>
+              <People n={30} filled={Math.round(share * 30)} />
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+                <span className="pill red">{crewActs.length} geobag crews placed</span>
+                <span className="pill violet">{nf(evacActs.reduce((a, x) => a + (x.places ?? 0), 0))} people to shelter</span>
+                <span className="pill grey">{nf(result.shelter_unused)} places spare</span>
+              </div>
+            </div>
+          </div>
         </section>
 
-        <section className="grid g-3" style={{ marginTop: 16 }}>
-          <div className="card">
-            <h3>Resources this week</h3>
-            <p className="sub">Planning inputs, set by the user. Nothing here is measured.</p>
-            <label className="ctrl-title" htmlFor="crews">Geobag crews: <b className="num">{crews}</b></label>
-            <input id="crews" type="range" min={0} max={20} step={1} value={crews} onChange={(e) => setCrews(Number(e.target.value))} style={{ width: "100%" }} />
-            <label className="ctrl-title" htmlFor="shelter">Shelter places: <b className="num">{nf(shelter)}</b></label>
-            <input id="shelter" type="range" min={0} max={3000} step={50} value={shelter} onChange={(e) => setShelter(Number(e.target.value))} style={{ width: "100%" }} />
-            <p className="note">Crews go to the stretches with the most expected people first. Shelter places then go to the stretches without a crew, up to the number of people in their forecast zone.</p>
-            <p className="note warn">People = homes × {ex.household_size} ({ex.household_source}). Probabilities come from a model tested on one monsoon (see Forecast).</p>
+        <section className="card" style={{ marginTop: 18 }}>
+          <div className="card-head"><div><h3>Where the help goes</h3><p className="sub">Solid ring: geobag crew. Dashed ring: evacuation. Dot colour: chance of moving.</p></div></div>
+          <div className="ribbon-wrap light">
+            <RiverRibbon banklines={data.banklines} segs={segs.filter((s) => prob.has(s.id))} bbox={data.manifest.aoi_bbox} prob={prob} people={people} marks={marks}
+              onPick={(id) => (window.location.href = `/alerts/?seg=${id}`)} />
+            <RibbonLegend mode="plan" />
           </div>
-          <div className="card span-2">
-            <h3>The plan</h3>
-            <p className="sub">Scenario: {scen === "river_rising" ? "river rising" : "river not rising"} · {result.actions.length} actions</p>
-            {result.actions.length === 0 ? <p className="muted">Add crews or shelter places to see a plan.</p> : (
-              <div className="table-wrap" style={{ maxHeight: "58dvh" }}>
-                <table className="data">
-                  <thead><tr><th>#</th><th>Stretch</th><th>Action</th><th>P(move)</th><th>People in zone</th><th>Expected people</th><th>Nearest home</th><th /></tr></thead>
-                  <tbody>
-                    {result.actions.map((a, i) => {
-                      const s = seg.get(a.id), e = exp.get(a.id);
-                      return (
-                        <tr key={a.id}>
-                          <td className="num">{i + 1}</td>
-                          <td>{a.id} <span className="dim">{s ? `${s.side} bank, ${latStr(s.centre[1])}` : ""}</span></td>
-                          <td><span className={`pill ${a.action === "geobags" ? "red" : "amber"}`}>{a.action === "geobags" ? "Geobag crew" : `Evacuate ${nf(a.places ?? 0)}`}</span></td>
-                          <td className="num">{pct(prob.get(a.id) ?? 0)}</td>
-                          <td className="num">{e ? nf(e.people_in_high_zone_est) : "–"}</td>
-                          <td className="num"><b>{nf(a.expected_people, 1)}</b></td>
-                          <td className="num">{e?.nearest_home_m != null ? `${e.nearest_home_m} m` : "–"}</td>
-                          <td><Link href={`/alerts/?seg=${a.id}`}>Alert →</Link></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+        </section>
+
+        <section style={{ marginTop: 18 }}>
+          <h3 style={{ fontFamily: "var(--display)", fontSize: 22, margin: "0 0 12px" }}>The plan, step by step</h3>
+          {result.actions.length === 0 ? <div className="card muted">Add crews or shelter places to see a plan.</div> : (
+            <div className="act-grid">
+              {result.actions.map((a, i) => {
+                const s = seg.get(a.id), e = exp.get(a.id), p = prob.get(a.id) ?? 0;
+                const geo = a.action === "geobags";
+                return (
+                  <Link key={a.id} href={`/alerts/?seg=${a.id}`} className="act-card" style={{ ["--accent" as string]: geo ? "#cf4a2f" : "#7356d0" }}>
+                    <div className="act-top"><span className="act-num">#{i + 1}</span><span className={`pill ${geo ? "red" : "violet"}`}>{geo ? "Geobag crew" : `Shelter ${nf(a.places ?? 0)}`}</span></div>
+                    <h4>{a.id}</h4>
+                    <div className="act-meta">{s ? `${s.side === "west" ? "West" : "East"} bank · ${latStr(s.centre[1])}` : ""}{e?.nearest_home_m != null && ` · nearest home ${e.nearest_home_m} m`}</div>
+                    <div style={{ marginTop: 10 }}><Bar value={p} color={probColor(p)} /></div>
+                    <div className="act-foot">
+                      <div className="big">{pct(p)}<small>chance of moving</small></div>
+                      <div className="big" style={{ textAlign: "right", color: "#7356d0" }}><PersonGlyph /> {e ? nf(e.people_in_high_zone_est) : "–"}<small>people in the way</small></div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+          <p className="note warn" style={{ marginTop: 16 }}>People = homes × {ex.household_size} (Census 2022 household size). Chances come from a model tested on one monsoon. Tap a card for its alert.</p>
         </section>
       </main>
       <Footer />

@@ -17,10 +17,17 @@ export const IconDownload = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><p
 export const IconTrend = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>;
 export const IconUsers = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></svg>;
 export const IconChat = (p: SVGProps<SVGSVGElement>) => <svg {...base(p)}><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>;
-export const Mark = ({ size = 36 }: { size?: number }) => (
+export const Mark = ({ size = 40 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true">
-    <circle cx="20" cy="20" r="18" fill="none" stroke="#e8eef1" strokeWidth="1.5" opacity=".35" />
-    <path d="M15 4c6 6-4 10 2 16s-3 11 3 16" fill="none" stroke="#57b8c9" strokeWidth="3" strokeLinecap="round" />
-    <circle cx="26" cy="15" r="2.6" fill="#e5533d" />
+    <defs>
+      <linearGradient id="nn-mark" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#0d3b44" />
+        <stop offset="1" stopColor="#13756f" />
+      </linearGradient>
+    </defs>
+    <rect x="1" y="1" width="38" height="38" rx="12" fill="url(#nn-mark)" />
+    <path d="M16 6c6 6-4 9 2 14s-3 9 3 14" fill="none" stroke="#bfeae6" strokeWidth="3.2" strokeLinecap="round" />
+    <circle cx="27" cy="15" r="3" fill="#ff9a7f" />
+    <circle cx="27" cy="15" r="5.5" fill="none" stroke="#ff9a7f" strokeOpacity=".45" />
   </svg>
 );
